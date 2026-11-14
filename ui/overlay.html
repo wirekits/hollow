@@ -5,57 +5,96 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>hollow++ overlay</title>
 <style>
+/* Оверлей поверх игры. Правило: анимируем только transform и opacity, без backdrop-filter и WebGL, чтобы не трогать FPS. */
 :root{
-  --ink:#f0f0f0; --ink2:#c4c4c4; --mute:#8a8a8a; --dim:#5a5a5a;
-  --line:rgba(255,255,255,.11);
+  --ink:#f4f4f4; --ink2:#c8c8c8; --mute:#909090; --dim:#5c5c5c;
+  --line:rgba(255,255,255,.12);
   --sans:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
   --mono:"Cascadia Mono",Consolas,"Courier New",monospace;
-  --ez:cubic-bezier(.2,.8,.2,1);
+  --ez:cubic-bezier(.2,.8,.2,1); --sp:cubic-bezier(.34,1.56,.64,1);
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:transparent;overflow:hidden;user-select:none;cursor:default}
-body{color:var(--ink);font:12px/1.4 var(--sans);-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;padding:6px}
-.card{background:rgba(8,8,8,.78);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:6px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font:600 11px var(--mono);color:var(--ink2);letter-spacing:.04em}
-.hd small{color:var(--mute);font-weight:400}
-.row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:3px}
+body{color:var(--ink);font:12px/1.4 var(--sans);-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;padding:7px;
+  text-shadow:0 1px 2px rgba(0,0,0,.9)}
+/* карточка: плотная подложка читается на любом кадре игры; светлая кромка сверху даёт объём */
+.card{position:relative;background:linear-gradient(180deg,rgba(22,22,22,.86),rgba(6,6,6,.84));border:1px solid var(--line);border-radius:10px;
+  padding:8px 10px;margin-bottom:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 6px 18px rgba(0,0,0,.45);
+  transition:opacity .32s var(--ez),transform .42s var(--sp)}
+.card.gone{opacity:0;transform:translateX(-14px) scale(.97);pointer-events:none;position:absolute;left:7px;right:7px}
+.hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font:600 10.5px var(--mono);color:var(--ink2);letter-spacing:.08em;text-transform:uppercase}
+.hd small{color:var(--mute);font-weight:400;letter-spacing:.02em}
+.hd span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px}
 .row b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .t{font:12px var(--mono);color:var(--ink2);flex:none}
-.mate .dot{width:6px;height:6px;border-radius:50%;background:var(--ink);flex:none;margin-right:6px}
+.t{font:600 12.5px var(--mono);color:var(--ink2);flex:none}
+/* строки списков появляются и уходят плавно */
+.it{transition:opacity .3s var(--ez),transform .4s var(--sp)}
+.it.in{opacity:0;transform:translateX(-10px)}
+.it.out{opacity:0;transform:translateX(10px)}
+/* команда */
+.mate .l{display:flex;align-items:center;min-width:0}
+.mate .dot{position:relative;width:7px;height:7px;border-radius:50%;background:var(--ink);flex:none;margin-right:7px}
+.mate .dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1px solid #fff;opacity:0}
 .mate.dead{color:var(--dim)}
 .mate.dead .dot{background:transparent;box-shadow:inset 0 0 0 1px var(--dim)}
 .mate.dead b{text-decoration:line-through;text-decoration-color:var(--dim)}
-.mate.off{opacity:.55}
-.mate .l{display:flex;align-items:center;min-width:0}
-.ev.urgent .t{color:var(--ink);font-weight:700}
-.ev.done{opacity:.45}
-.bar{height:2px;background:rgba(255,255,255,.08);border-radius:2px;margin-top:3px;overflow:hidden}
-.bar i{display:block;height:100%;width:100%;background:var(--ink2);transform-origin:left;transition:transform .28s var(--ez)}
-.al{border-left:2px solid var(--dim);padding:3px 8px;margin-top:4px;transition:opacity .6s linear;animation:in .28s var(--ez)}
+.mate.off{opacity:.5}
+.mate.hit .dot::after{animation:ring .9s var(--ez)}            /* смена статуса: кольцо от точки */
+.mate.hit b{animation:nudge .5s var(--sp)}
+@keyframes ring{from{opacity:.9;transform:scale(.6)}to{opacity:0;transform:scale(2.4)}}
+@keyframes nudge{from{transform:translateX(6px)}to{transform:none}}
+/* ивенты: кольцо-отсчёт слева, крупный таймер справа */
+.ev{display:flex;align-items:center;gap:8px;margin-top:5px;position:relative}
+.ev b{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ring{flex:none;width:18px;height:18px;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:2.6}
+.ring .b{stroke:rgba(255,255,255,.14)}
+.ring .f{stroke:var(--ink2);stroke-linecap:round;stroke-dasharray:100}
+.ev.urgent .ring .f{stroke:#fff}
+.ev.urgent .t{color:#fff;animation:beat 1s ease-in-out infinite}
+.ev.urgent::before{content:"";position:absolute;inset:-3px -6px;border-radius:6px;background:rgba(255,255,255,.1);opacity:0;animation:wash 1s ease-in-out infinite;pointer-events:none}
+.ev.crit .t{animation-duration:.5s}
+.ev.done{opacity:.4}
+.ev.done .ring .f{stroke:transparent}
+@keyframes beat{0%,100%{transform:none;opacity:1}14%{transform:scale(1.14)}30%{transform:none}46%{transform:scale(1.07)}70%{opacity:.75}}
+@keyframes wash{0%,100%{opacity:0}14%{opacity:1}60%{opacity:0}}
+/* алерты */
+.al{position:relative;border-left:2px solid var(--dim);background:linear-gradient(180deg,rgba(22,22,22,.86),rgba(6,6,6,.84));border-radius:0 8px 8px 0;
+  padding:5px 9px;margin-top:5px;transition:opacity .5s linear,transform .45s var(--sp)}
+.al.in{opacity:0;transform:translateY(-8px) scale(.96)}
+.al.out{opacity:0;transform:translateX(12px)}
 .al.p-med{border-left-color:var(--ink2)}
-.al.p-high{border-left-color:var(--ink);background:rgba(255,255,255,.08)}
+.al.p-high{border-left:3px solid #fff;background:linear-gradient(180deg,rgba(70,70,70,.9),rgba(20,20,20,.9));box-shadow:0 0 0 1px rgba(255,255,255,.35)}
 .al.p-low{border-left-style:dotted}
 .al b{display:block;font-weight:600}
-.al span{color:var(--mute)}
-@keyframes in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.al span{color:var(--ink2)}
+.al.p-high::after{content:"";position:absolute;inset:0;border-radius:inherit;background:#fff;opacity:0;animation:flash .7s ease-out;pointer-events:none}
+@keyframes flash{from{opacity:.55}to{opacity:0}}
+/* критичный алерт: рамка по краю окна оверлея вспыхивает три раза и гаснет — видно боковым зрением */
+#edge{position:fixed;inset:0;pointer-events:none;opacity:0;border-radius:12px;
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.95),inset 0 0 26px 2px rgba(255,255,255,.4)}
+#edge.go{animation:edge 2.4s ease-out}
+@keyframes edge{0%{opacity:0}6%{opacity:1}22%{opacity:.15}34%{opacity:.9}50%{opacity:.12}62%{opacity:.7}100%{opacity:0}}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
-<div class="card" id="cSrv" hidden>
+<div class="card gone" id="cSrv">
   <div class="hd"><span id="srvName">—</span><small id="srvOn"></small></div>
   <div class="row"><span style="color:var(--mute)" id="wipeL">wipe</span><span class="t" id="wipeT">—</span></div>
 </div>
-<div class="card" id="cTeam" hidden>
+<div class="card gone" id="cTeam">
   <div class="hd"><span id="teamL">team</span><small id="teamCnt"></small></div>
   <div id="team"></div>
 </div>
-<div class="card" id="cEv" hidden>
+<div class="card gone" id="cEv">
   <div class="hd"><span id="evL">events</span></div>
   <div id="evs"></div>
 </div>
 <div id="alerts"></div>
+<div id="edge"></div>
 <script>
 (function () {
   "use strict";
@@ -69,59 +108,112 @@ body{color:var(--ink);font:12px/1.4 var(--sans);-webkit-font-smoothing:antialias
   };
   var $ = function (id) { return document.getElementById(id); };
   var tt = function (k) { return Object.prototype.hasOwnProperty.call(T, k) ? T[k] : String(k); };
-  var esc = function (s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  };
   $("wipeL").textContent = tt("wipe"); $("teamL").textContent = tt("team"); $("evL").textContent = tt("events");
 
   var server = { name: "", online: null, max: null, wipeEnd: 0 };
   var team = [];
   var evs = [];   // [key, status, endMs, total]
-  var alerts = []; // {ts, prio, title, text, el}
-
   var fmt = function (s) { return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+  var setText = function (el, s) { if (el.textContent !== s) el.textContent = s; };
+  var show = function (el, on) { el.classList.toggle("gone", !on); };
+
+  /* Списки обновляем по ключам, а не через innerHTML: строки не мигают, появление и уход анимируются. */
+  function sync(host, items, keyOf, make, update) {
+    var have = {}, i;
+    for (i = 0; i < host.children.length; i++) { var c = host.children[i]; if (!c._dead) have[c._k] = c; }
+    var prev = null;
+    items.forEach(function (it) {
+      var k = keyOf(it), el = have[k];
+      if (!el) {
+        el = make(it); el._k = k; el.classList.add("it", "in");
+        host.insertBefore(el, prev ? prev.nextSibling : host.firstChild);
+        void el.offsetWidth; el.classList.remove("in");
+      } else {
+        delete have[k];
+        var want = prev ? prev.nextSibling : host.firstChild;
+        if (el !== want) host.insertBefore(el, want);
+      }
+      update(el, it);
+      prev = el;
+    });
+    Object.keys(have).forEach(function (k) {
+      var el = have[k]; el._dead = true; el.classList.add("out");
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 420);
+    });
+  }
 
   function renderServer() {
-    var has = !!(server.name || server.online != null);
-    $("cSrv").hidden = !has;
-    $("srvName").textContent = server.name || "—";
-    $("srvOn").textContent = server.online == null ? "" : server.online + "/" + (server.max == null ? "—" : server.max);
+    show($("cSrv"), !!(server.name || server.online != null));
+    setText($("srvName"), server.name || "—");
+    setText($("srvOn"), server.online == null ? "" : server.online + "/" + (server.max == null ? "—" : server.max));
     var left = server.wipeEnd ? Math.max(0, Math.round((server.wipeEnd - Date.now()) / 1000)) : null;
-    if (left == null) { $("wipeT").textContent = "—"; return; }
+    if (left == null) { setText($("wipeT"), "—"); return; }
     var d = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60);
-    $("wipeT").textContent = d + tt("d") + " " + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    setText($("wipeT"), d + tt("d") + " " + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"));
   }
   function renderTeam() {
-    $("cTeam").hidden = !team.length;
-    $("teamCnt").textContent = team.length ? team.filter(function (m) { return m.alive; }).length + "/" + team.length : "";
-    $("team").innerHTML = team.map(function (m) {
-      return '<div class="row mate ' + (m.alive ? "" : "dead") + (m.online === false ? " off" : "") + '"><span class="l"><i class="dot"></i><b>' +
-        esc(m.n) + "</b></span></div>";
-    }).join("");
+    show($("cTeam"), team.length > 0);
+    setText($("teamCnt"), team.length ? team.filter(function (m) { return m.alive; }).length + "/" + team.length : "");
+    var seen = {};
+    sync($("team"), team, function (m) {                       // тёзки не должны делить одну строку
+      var k = String(m.id != null ? m.id : m.n); seen[k] = (seen[k] || 0) + 1;
+      return seen[k] > 1 ? k + "#" + seen[k] : k;
+    }, function () {
+      var el = document.createElement("div");
+      el.className = "row mate";
+      el.innerHTML = '<span class="l"><i class="dot"></i><b></b></span>';
+      return el;
+    }, function (el, m) {
+      setText(el.querySelector("b"), String(m.n == null ? "" : m.n));
+      var alive = !!m.alive;
+      if (el._alive != null && el._alive !== alive) {           // умер или встал: короткий акцент
+        el.classList.remove("hit"); void el.offsetWidth; el.classList.add("hit");
+      }
+      el._alive = alive;
+      el.classList.toggle("dead", !alive);
+      el.classList.toggle("off", m.online === false);
+    });
   }
   function renderEv() {
     var now = Date.now();
-    $("cEv").hidden = !evs.length;
-    $("evs").innerHTML = evs.map(function (e) {
+    show($("cEv"), evs.length > 0);
+    sync($("evs"), evs, function (e) { return e[0]; }, function () {
+      var el = document.createElement("div");
+      el.className = "ev";
+      el.innerHTML = '<svg class="ring" viewBox="0 0 36 36"><circle class="b" cx="18" cy="18" r="14.5"/><circle class="f" cx="18" cy="18" r="14.5" pathLength="100"/></svg><b></b><span class="t"></span>';
+      return el;
+    }, function (el, e) {
       var left = Math.max(0, Math.ceil((e[2] - now) / 1000));
-      var f = left <= 0 ? 0 : Math.max(0, Math.min(1, 1 - left / e[3]));
-      return '<div class="ev ' + (left > 0 && left < 180 ? "urgent " : "") + (left <= 0 ? "done" : "") + '"><div class="row"><b>' +
-        esc(tt(e[0])) + '</b><span class="t">' + (left <= 0 ? tt("gone") : fmt(left)) + '</span></div><div class="bar"><i style="transform:scaleX(' +
-        f.toFixed(3) + ')"></i></div></div>';
-    }).join("");
+      setText(el.querySelector("b"), tt(e[0]));
+      setText(el.querySelector(".t"), left <= 0 ? tt("gone") : fmt(left));
+      el.querySelector(".f").style.strokeDashoffset = (left <= 0 ? 100 : 100 - Math.max(0, Math.min(1, left / e[3])) * 100).toFixed(1);
+      el.classList.toggle("urgent", left > 0 && left < 180);    // меньше 3 минут: пульс
+      el.classList.toggle("crit", left > 0 && left < 30);       // меньше 30 секунд: пульс вдвое чаще
+      el.classList.toggle("done", left <= 0);
+    });
   }
-  function renderAlerts() {
-    var host = $("alerts"), now = Date.now();
-    alerts = alerts.filter(function (a) { return now - a.ts < 20000; }).slice(0, 3);
-    var html = alerts.map(function (a) {
-      var age = now - a.ts;
-      var op = age < 12000 ? 1 : Math.max(0, 1 - (age - 12000) / 8000);
-      return '<div class="al p-' + a.prio + '" style="opacity:' + op.toFixed(2) + '"><b>' + esc(a.title) + "</b>" +
-        (a.text ? "<span>" + esc(a.text) + "</span>" : "") + "</div>";
-    }).join("");
-    if (host._h !== html) { host._h = html; host.innerHTML = html; }
+
+  var alertSeq = 0;
+  function onAlert(p) {
+    if (!p) return;
+    var prio = p.prio === "high" || p.prio === "med" ? p.prio : "low";
+    var title = String(p.title || ""), text = String(p.text || "");
+    var host = $("alerts"), el = document.createElement("div");
+    el.className = "al in p-" + prio;
+    var b = document.createElement("b"); b.textContent = title || text; el.appendChild(b);
+    if (title && text) { var s = document.createElement("span"); s.textContent = text; el.appendChild(s); }
+    host.insertBefore(el, host.firstChild);
+    void el.offsetWidth; el.classList.remove("in");
+    var drop = function (x) { if (x._dead) return; x._dead = true; x.classList.add("out"); setTimeout(function () { if (x.parentNode) x.parentNode.removeChild(x); }, 520); };
+    var live = Array.prototype.filter.call(host.children, function (x) { return !x._dead; });
+    live.slice(3).forEach(drop);                                // не больше трёх на экране
+    setTimeout(function () { el.style.opacity = ".55"; }, 12000);
+    setTimeout(function () { drop(el); }, 20000);
+    if (prio === "high") {                                      // вспышка по краю: перезапуск анимации
+      var edge = $("edge"), seq = ++alertSeq;
+      edge.classList.remove("go"); void edge.offsetWidth; edge.classList.add("go");
+      setTimeout(function () { if (seq === alertSeq) edge.classList.remove("go"); }, 2500);
+    }
   }
 
   function setServer(p) { Object.assign(server, p || {}); renderServer(); }
@@ -133,17 +225,9 @@ body{color:var(--ink);font:12px/1.4 var(--sans);-webkit-font-smoothing:antialias
     });
     renderEv();
   }
-  function onAlert(p) {
-    if (!p) return;
-    var prio = p.prio === "high" || p.prio === "med" ? p.prio : "low";
-    var title = String(p.title || ""), text = String(p.text || "");
-    alerts.unshift({ ts: Date.now(), prio: prio, title: title || text, text: title ? text : "" });
-    alerts.length = Math.min(alerts.length, 3);
-    renderAlerts();
-  }
+  window.hollowOverlay = { setServer: setServer, setTeam: setTeam, setEvents: setEvents, onAlert: onAlert };
 
-  setInterval(function () { renderEv(); renderServer(); }, 1000);
-  setInterval(renderAlerts, 1000);
+  setInterval(function () { if (document.hidden) return; renderEv(); renderServer(); }, 1000);
 
   try {
     if (window.__TAURI__ && window.__TAURI__.event) {

@@ -973,6 +973,153 @@ html.no-motion .msg.fresh::before,html.no-motion .fresh-hl::before{display:none}
 .fold.sec:not(.open)>.fold-b>div{padding-top:0;padding-bottom:0}
 .fold.sec>.fold-b>div{transition:visibility 0s .42s,padding .42s var(--ez)}
 .fold.sec.open>.fold-b>div{transition:visibility 0s,padding .42s var(--ez)}
+
+/* ============ v4 · глубина и свет (поверх v3; монохром, движение только transform/opacity) ============ */
+/* --- живой фон: canvas с перспективной сеткой (рисуется в скрипте, пауза при скрытом окне) + статичное зерно --- */
+#bgfx{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:0;transition:opacity 1.4s ease}
+#bgfx.on{opacity:1}
+body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.045;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>")}
+/* панели — тёмное стекло: фон едва просвечивает */
+.panel{position:relative;background:linear-gradient(180deg,rgba(255,255,255,.032),transparent 42%),rgba(12,12,12,.76);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.45),0 18px 40px -18px rgba(0,0,0,.7)}
+.card{position:relative;background:linear-gradient(180deg,rgba(255,255,255,.028),transparent 40%),rgba(12,12,12,.8);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.45),0 18px 40px -20px rgba(0,0,0,.7)}
+.hdr{position:relative;box-shadow:0 1px 0 rgba(255,255,255,.03),0 14px 30px -18px rgba(0,0,0,.8)}
+.hdr::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.28) 50%,transparent);opacity:.55}
+.logo-img{transition:transform .6s var(--sp),box-shadow .4s}
+.id:hover .logo-img{transform:rotate(-8deg) scale(1.06);box-shadow:0 0 0 1px var(--line-h),0 0 22px rgba(255,255,255,.18),0 4px 14px rgba(0,0,0,.55)}
+
+/* --- свет за курсором: мягкое пятно внутри и блик по кромке --- */
+.panel::before,.card::before,.pf-panel::before,.storage-card::before,.cam-card::before,.pf-tile::before,.tk-key::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .45s ease;
+  background:radial-gradient(360px circle at var(--mx,-999px) var(--my,-999px),rgba(255,255,255,.06),transparent 62%)}
+.panel::after,.card::after,.pf-panel::after,.storage-card::after,.cam-card::after,.pf-tile::after,.tk-key::after{
+  content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;pointer-events:none;opacity:0;transition:opacity .45s ease;
+  background:radial-gradient(240px circle at var(--mx,-999px) var(--my,-999px),rgba(255,255,255,.55),transparent 72%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.lit::before,.lit::after{opacity:1}
+.pf-panel,.storage-card,.cam-card,.pf-tile,.tk-key{position:relative}
+/* лёгкий наклон мелких карточек вслед за курсором; возврат — пружиной */
+.storage-card,.cam-card,.alarm-card,.pf-tile,.stats>div,.tk-key{transition:transform .5s var(--sp),box-shadow .3s var(--ez),border-color .25s;will-change:auto}
+.storage-card.lit,.cam-card.lit,.alarm-card.lit,.pf-tile.lit,.stats>div.lit,.tk-key.lit{
+  transform:perspective(800px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(-2px);
+  transition:transform .14s linear,box-shadow .3s var(--ez),border-color .25s;
+  border-color:var(--line-h);box-shadow:0 14px 30px -10px rgba(0,0,0,.6)}
+
+/* --- карта: рамка с глубиной, стеклянный блик, наклон в псевдо-3D --- */
+.mapframe{perspective:1500px}
+.bezel{
+  transform:rotateX(var(--bx,0deg)) rotateY(var(--by,0deg));transition:transform .5s var(--ez);
+  background:linear-gradient(155deg,#242424,#0d0d0d 46%,#171717);
+  box-shadow:0 0 0 1px var(--line-s),inset 0 1px 0 rgba(255,255,255,.1),inset 0 -1px 0 rgba(0,0,0,.7),
+    0 0 0 6px rgba(0,0,0,.34),0 28px 60px rgba(0,0,0,.6),0 70px 120px -30px rgba(0,0,0,.55)}
+.bezel::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:3;
+  background:linear-gradient(118deg,rgba(255,255,255,.075),transparent 26%,transparent 72%,rgba(255,255,255,.03))}
+.bezel::after{content:"";position:absolute;left:8%;right:8%;bottom:-9%;height:10%;border-radius:50%;pointer-events:none;z-index:-1;
+  background:radial-gradient(closest-side,rgba(0,0,0,.75),transparent);opacity:0;transition:opacity .6s ease}
+.bezel.tilt{transform:translateY(-3%) rotateX(calc(44deg + var(--bx,0deg))) rotateY(var(--by,0deg)) scale(.9);transition-duration:.9s}
+.bezel.tilt::after{opacity:1}
+.mapbox{box-shadow:0 0 0 1px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.06),0 0 30px rgba(0,0,0,.6)}
+.map-tools button.on{color:#000;background:var(--ink);border-color:var(--ink);box-shadow:0 0 14px rgba(255,255,255,.25)}
+
+/* --- вкладки: стеклянная «таблетка» перетекает между пунктами --- */
+nav.tabs{box-shadow:inset 0 1px 0 rgba(255,255,255,.03),0 10px 26px -14px rgba(0,0,0,.8)}
+nav.tabs button{z-index:1}
+nav.tabs button.on{background:transparent;box-shadow:none}
+.tab-ind{left:0;top:3px;bottom:3px;width:40px;height:auto;border-radius:9px;z-index:0;transform:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.115),rgba(255,255,255,.04));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 0 0 1px var(--line-s),0 6px 18px rgba(0,0,0,.5);
+  transition:left .52s var(--sp),width .52s var(--sp),opacity .25s}
+.tab-ind::after{content:"";position:absolute;left:22%;right:22%;bottom:-1px;height:2px;border-radius:2px;background:#fff;box-shadow:0 0 12px rgba(255,255,255,.75)}
+nav.tabs button .ic{transition:transform .5s var(--sp),opacity .2s}
+nav.tabs button.on .ic{transform:scale(1.12)}
+/* смена вкладок: страница приезжает из глубины с поворотом */
+@keyframes viewInR{from{opacity:0;transform:perspective(1500px) translate3d(64px,0,-140px) rotateY(-7deg)}to{opacity:1;transform:perspective(1500px) translate3d(0,0,0) rotateY(0)}}
+@keyframes viewInL{from{opacity:0;transform:perspective(1500px) translate3d(-64px,0,-140px) rotateY(7deg)}to{opacity:1;transform:perspective(1500px) translate3d(0,0,0) rotateY(0)}}
+@keyframes colInL{from{opacity:0;transform:perspective(1200px) translate3d(-40px,0,-80px) rotateY(10deg)}to{opacity:1;transform:perspective(1200px) translate3d(0,0,0) rotateY(0)}}
+@keyframes colInR{from{opacity:0;transform:perspective(1200px) translate3d(40px,0,-80px) rotateY(-10deg)}to{opacity:1;transform:perspective(1200px) translate3d(0,0,0) rotateY(0)}}
+@keyframes mapInF{from{opacity:0;transform:perspective(1400px) translate3d(0,18px,-170px) rotateX(9deg)}to{opacity:1;transform:perspective(1400px) translate3d(0,0,0) rotateX(0)}}
+.view.on:not(#v-map){animation:viewInR .55s var(--ez)}
+#v-map.on .col.l{animation:colInL .6s var(--ez) both}
+#v-map.on .col.r{animation:colInR .6s var(--ez) .07s both}
+#v-map.on .mapcol{animation:mapInF .75s var(--ez) .04s both}
+
+/* --- ивенты: кольцевой таймер, urgent бьётся как пульс --- */
+.ev{display:flex;align-items:center;gap:10px;position:relative}
+.ev .eb{flex:1;min-width:0}
+.ev .eb b{display:block;font:500 var(--fs-4)/1.25 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev .eb small{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev .t{font:600 15px/1 var(--mono);letter-spacing:-.01em}
+.ering{position:relative;flex:none;width:32px;height:32px;display:grid;place-items:center;color:var(--mute)}
+.ering .rg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.ering .rg circle{fill:none;stroke-width:2.2}
+.ering .rg .b{stroke:rgba(255,255,255,.08)}
+.ering .rg .f{stroke:var(--ink2);stroke-linecap:round;stroke-dasharray:100;transition:stroke-dashoffset 1s linear}
+.ering .ic{width:14px;height:14px}
+.ev.urgent .ering{color:var(--ink)}
+.ev.urgent .ering .f{stroke:#fff}
+.ev.urgent::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.8),0 0 24px rgba(255,255,255,.16);
+  animation:urgBeat 1s ease-in-out infinite;animation-delay:var(--ph,0ms)}
+.ev.urgent .t{animation:urgNum 1s ease-in-out infinite;animation-delay:var(--ph,0ms)}
+@keyframes urgBeat{0%,100%{opacity:0}14%{opacity:.95}30%{opacity:.12}46%{opacity:.6}70%{opacity:0}}
+@keyframes urgNum{0%,100%{transform:none}14%{transform:scale(1.09)}30%{transform:none}46%{transform:scale(1.05)}70%{transform:none}}
+.ev.done .ering .f{stroke:transparent}
+.ev.done .ering .b{stroke-dasharray:2 3}
+
+/* --- переключатели: свечение во включённом состоянии --- */
+.tg.on{box-shadow:0 0 0 3px rgba(255,255,255,.05),0 0 16px rgba(255,255,255,.14)}
+/* --- кнопки: блик пробегает при наведении --- */
+.btn::before{content:"";position:absolute;top:-20%;bottom:-20%;left:-45%;width:34%;pointer-events:none;opacity:0;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.2),transparent);transform:skewX(-18deg)}
+.btn:hover::before{opacity:1;transform:skewX(-18deg) translateX(520%);transition:transform .75s var(--ez),opacity .2s}
+.btn:hover{box-shadow:0 6px 18px -6px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.06)}
+.btn.pri:hover{box-shadow:0 0 22px rgba(255,255,255,.22)}
+/* --- тосты: стекло и полоска оставшегося времени --- */
+.toast{box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 16px 40px rgba(0,0,0,.6)}
+.toast .tprog{position:absolute;left:12px;right:12px;bottom:1px;height:1.5px;border-radius:2px;background:rgba(255,255,255,.55);transform-origin:0 50%;animation:tprog var(--life,2.2s) linear forwards}
+@keyframes tprog{to{transform:scaleX(0)}}
+/* --- пустые состояния: значок «дышит», от него расходятся кольца --- */
+.em-ic{position:relative;display:grid;place-items:center;width:56px;height:56px}
+.em-ic .ic{animation:emFloat 4.5s ease-in-out infinite}
+.em-ic i{position:absolute;inset:8px;border-radius:50%;border:1px solid rgba(255,255,255,.22);opacity:0;animation:emRing 3.2s ease-out infinite}
+.em-ic i+i{animation-delay:1.6s}
+@keyframes emFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes emRing{0%{opacity:.7;transform:scale(.55)}100%{opacity:0;transform:scale(1.5)}}
+/* --- профиль: календарь строится волной --- */
+.pf-cal-c .c{animation:pfCell .4s ease backwards}
+
+/* --- заставка: гироскоп с глубиной, свет, пролёт сквозь камеру --- */
+#splash{perspective:900px;background:radial-gradient(60% 50% at 50% 46%,#161616,#040404 72%);animation:spOut .55s var(--ez) 1.6s forwards}
+.sp-in{gap:26px;transform-style:preserve-3d;animation:spIn .9s var(--sp) both,spLeave .6s cubic-bezier(.6,0,.85,.35) 1.5s forwards}
+.sp-sway{transform-style:preserve-3d;animation:spSway 3.2s ease-in-out infinite alternate}
+.sp-scene{position:relative;width:190px;height:190px;transform-style:preserve-3d;transform:rotateX(var(--sx,0deg)) rotateY(var(--sy,0deg));transition:transform .35s ease-out}
+.sp-scene img{position:absolute;left:47px;top:47px;width:96px;height:96px;border-radius:50%;object-fit:cover;transform:translateZ(34px);
+  box-shadow:0 0 0 1px rgba(255,255,255,.3),0 0 44px rgba(255,255,255,.14),0 24px 50px rgba(0,0,0,.8)}
+.sp-glare{position:absolute;left:47px;top:47px;width:96px;height:96px;border-radius:50%;overflow:hidden;transform:translateZ(35px);pointer-events:none}
+.sp-glare::after{content:"";position:absolute;top:-20%;bottom:-20%;left:-70%;width:50%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:skewX(-20deg);animation:spGlare 1.1s var(--ez) .45s both}
+.sp-g{position:absolute;border-radius:50%;border:1.5px solid rgba(255,255,255,.09);border-top-color:#fff;border-right-color:rgba(255,255,255,.4)}
+.sp-g.a{inset:6px;animation:spGa 1.9s linear infinite}
+.sp-g.b{inset:22px;border-width:1px;animation:spGb 2.6s linear infinite}
+.sp-g.c{inset:-12px;border:1px dashed rgba(255,255,255,.2);animation:spGc 9s linear infinite}
+.sp-sh{position:absolute;left:30px;right:30px;bottom:-34px;height:26px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.9),transparent);transform:translateZ(-60px)}
+.sp-word{display:flex;gap:.02em;font:600 19px var(--serif);letter-spacing:.2em;color:var(--ink);animation:none;transform:translateZ(20px)}
+.sp-word span{display:inline-block;animation:spLet .6s var(--sp) both;animation-delay:calc(.42s + var(--i) * 45ms)}
+.sp-bar{width:140px;height:1px;background:rgba(255,255,255,.1)}
+.sp-bar i{box-shadow:0 0 10px rgba(255,255,255,.8);animation:spBar 1.25s var(--ez) .15s both}
+@keyframes spIn{from{opacity:0;transform:translateZ(-420px) rotateX(24deg)}to{opacity:1;transform:none}}
+@keyframes spLeave{to{opacity:0;transform:translateZ(620px) scale(1.25)}}
+@keyframes spSway{from{transform:rotateY(-14deg) rotateX(5deg)}to{transform:rotateY(14deg) rotateX(-4deg)}}
+@keyframes spGa{from{transform:rotateX(66deg) rotateZ(0)}to{transform:rotateX(66deg) rotateZ(360deg)}}
+@keyframes spGb{from{transform:rotateY(62deg) rotateZ(360deg)}to{transform:rotateY(62deg) rotateZ(0)}}
+@keyframes spGc{from{transform:rotateX(74deg) rotateY(-18deg) rotateZ(0)}to{transform:rotateX(74deg) rotateY(-18deg) rotateZ(360deg)}}
+@keyframes spGlare{to{transform:skewX(-20deg) translateX(520%)}}
+@keyframes spLet{from{opacity:0;transform:translateY(14px) rotateX(-80deg)}to{opacity:1;transform:none}}
+@keyframes appIn3{from{opacity:0;transform:perspective(1300px) translateZ(-150px)}to{opacity:1;transform:perspective(1300px) translateZ(0)}}
+html.splashing .app{animation:appIn3 .85s var(--ez) 1.5s backwards}
+html.no-motion #bgfx{display:none}
 </style>
 </head>
 <body>
@@ -1424,15 +1571,22 @@ html.no-motion .msg.fresh::before,html.no-motion .fresh-hl::before{display:none}
     var img = document.querySelector(".logo-img");
     var s = document.createElement("div");
     s.id = "splash"; s.setAttribute("aria-hidden", "true");
-    s.innerHTML = '<div class="sp-in"><div class="sp-logo">' + (img ? '<img alt="" src="' + img.src + '">' : "") +
-      '<svg viewBox="0 0 132 132"><circle cx="66" cy="66" r="60" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1.5"/>' +
-      '<circle class="sp-ring" cx="66" cy="66" r="60" fill="none" stroke="#e8e8e8" stroke-width="1.5" stroke-linecap="round"/></svg></div>' +
-      '<div class="sp-word">hollow++</div><div class="sp-bar"><i></i></div></div>';
+    /* гироскоп: три кольца в разных плоскостях вокруг логотипа, блик, тень; сцена слегка следит за курсором */
+    var word = "hollow++".split("").map(function (c, i) { return '<span style="--i:' + i + '">' + c + "</span>"; }).join("");
+    s.innerHTML = '<div class="sp-in"><div class="sp-sway"><div class="sp-scene"><i class="sp-sh"></i><i class="sp-g c"></i><i class="sp-g a"></i><i class="sp-g b"></i>' +
+      (img ? '<img alt="" src="' + img.src + '">' : "") + '<i class="sp-glare"></i></div></div>' +
+      '<div class="sp-word">' + word + '</div><div class="sp-bar"><i></i></div></div>';
     de.classList.add("splashing");
     document.body.appendChild(s);
-    var done = function () { if (s.parentNode) s.remove(); de.classList.remove("splashing"); };
+    var scene = s.querySelector(".sp-scene");
+    var par = function (e) {
+      scene.style.setProperty("--sy", ((e.clientX / innerWidth - .5) * 26).toFixed(1) + "deg");
+      scene.style.setProperty("--sx", (-(e.clientY / innerHeight - .5) * 22).toFixed(1) + "deg");
+    };
+    addEventListener("pointermove", par, { passive: true });
+    var done = function () { removeEventListener("pointermove", par); if (s.parentNode) s.remove(); de.classList.remove("splashing"); };
     s.addEventListener("animationend", function (e) { if (e.target === s) done(); });
-    setTimeout(done, 1700);
+    setTimeout(done, 2500);
   } catch (e) {}
 })();
 </script>
@@ -1743,6 +1897,8 @@ function toast(msg, type = "") {
   const el = document.createElement("div");
   el.className = "toast " + type;
   el.textContent = msg;
+  const life = /^p-high/.test(type) ? 4200 : 2200, bar = document.createElement("i");
+  bar.className = "tprog"; bar.style.setProperty("--life", life + "ms"); el.appendChild(bar);
   const wrap = $("#toasts");
   wrap.appendChild(el);
   while (wrap.children.length > 4) wrap.firstElementChild.remove();
@@ -1806,7 +1962,7 @@ if (store.get("schema", 0) < 2) {
 const ic = (n, c) => `<svg class="ic${c ? " " + c : ""}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const EMPTY_IC = { emptyTeam: "users", emptyEvents: "clock", emptyDevices: "switch", emptyStorage: "box", emptyDecay: "shield", emptyCams: "cam",
   emptyAlarms: "bell", emptyHist: "hist", emptyShops: "cart", emptyMerchant: "pin", farmNoBoxes: "box", lookupNone: "user", trkEmpty: "target" };
-const E = k => `<div class="empty">${ic(EMPTY_IC[k] || "flag", "lg")}<span>${$t(k)}</span></div>`;
+const E = k => `<div class="empty"><span class="em-ic"><i></i><i></i>${ic(EMPTY_IC[k] || "flag", "lg")}</span><span>${$t(k)}</span></div>`;
 const server = { connected: false, name: "", online: null, max: null, ping: null, seed: null, mapSize: 4000, wipeStart: 0, wipeEnd: 0 };
 let mapImage = null;
 const markers = [];       // { type: "monument" | "shop" | "cargo" | "other", name, u, v, rot }
@@ -2050,16 +2206,24 @@ function barsSwap(host, html) {
 const EV_IC = { evCargo: "ship", evHeli: "heli", evChinook: "heli", evOil: "flag", evMerchant: "cart" };
 const frac = x =>Math.max(0, Math.min(1, +x || 0)).toFixed(3);
 function renderEv() {
-  barsSwap($("#evs"), evs.length ? evs.map((e, idx) => {
+  /* кольцо вокруг значка — оставшееся время; urgent бьётся в такт секундам (фаза от часов, не сбивается перерисовкой) */
+  const host = $("#evs"), old = {}, ph = -(Date.now() % 1000);
+  host.querySelectorAll(".rg .f").forEach(c => { old[c.dataset.k] = c.style.strokeDashoffset; });
+  host.innerHTML = evs.length ? evs.map((e, idx) => {
     const urgent = e[2] < 180 && e[2] > 0;
     const done = e[2] <= 0;
-    const f = done ? 0 : frac(1 - e[2] / e[3]);
-    return `<div class="ev ${urgent ? "urgent" : ""} ${done ? "done" : ""}" data-i="${idx}">
-      <div class="r1">${ic(EV_IC[e[0]] || "flag")}<b>${esc($t(e[0]))}</b><span class="t">${done ? "—" : fmt(e[2])}</span></div>
-      <small>${esc($t(e[1]))}</small>
-      <div class="hair"><i data-bk="${esc(e[0])}" data-v="${f}" style="transform:scaleX(${f})"></i></div>
+    const off = done ? 100 : (100 - Math.max(0, Math.min(1, e[2] / e[3])) * 100).toFixed(2);
+    return `<div class="ev ${urgent ? "urgent" : ""} ${done ? "done" : ""}" data-i="${idx}" style="--ph:${ph}ms">
+      <span class="ering"><svg class="rg" viewBox="0 0 36 36"><circle class="b" cx="18" cy="18" r="15.9"/><circle class="f" data-k="${esc(e[0])}" cx="18" cy="18" r="15.9" pathLength="100" style="stroke-dashoffset:${off}"/></svg>${ic(EV_IC[e[0]] || "flag")}</span>
+      <div class="eb"><b>${esc($t(e[0]))}</b><small>${esc($t(e[1]))}</small></div>
+      <span class="t">${done ? "—" : fmt(e[2])}</span>
     </div>`;
-  }).join("") : E("emptyEvents"));
+  }).join("") : E("emptyEvents");
+  if (rm()) return;
+  const fs = host.querySelectorAll(".rg .f");          // кольцо плавно доезжает от прошлого значения
+  fs.forEach(c => { const o = old[c.dataset.k]; if (o == null || o === "") return; c._to = c.style.strokeDashoffset; c.style.transition = "none"; c.style.strokeDashoffset = o; });
+  void host.offsetWidth;
+  fs.forEach(c => { if (c._to != null) { c.style.transition = ""; c.style.strokeDashoffset = c._to; } });
 }
 function setEvents(list) {
   evs.length = 0; evEnd.length = 0;
@@ -2617,7 +2781,7 @@ function pfCalendar(a) {
       const t = start + (w * 7 + r) * DAY;
       if (t > today) { cells += '<i class="c x"></i>'; continue; }
       const key = new Date(t).toISOString().slice(0, 10), v = map[key] || 0;
-      cells += `<i class="c l${lv(v)}" title="${key} · ${pfFmt("pfMin", { n: fnum(v) })}"></i>`;
+      cells += `<i class="c l${lv(v)}" style="animation-delay:${(0.2 + w * 0.014 + r * 0.012).toFixed(2)}s" title="${key} · ${pfFmt("pfMin", { n: fnum(v) })}"></i>`;
     }
   }
   const wd = pfWd(), lab = [0, 2, 4].map(i => wd[i]);
@@ -2792,10 +2956,22 @@ let indPlaced = false;
 function moveInd() {
   const ind = $("#tabInd"), b = $("#tabs button.on");
   if (!ind || !b || !b.offsetWidth) return;
-  if (!indPlaced) { ind.style.transition = "none"; }
-  ind.style.transform = `translateX(${b.offsetLeft + 10}px) scaleX(${Math.max(1, b.offsetWidth - 20)})`;
-  ind.style.opacity = "1";
-  if (!indPlaced) { indPlaced = true; void ind.offsetWidth; ind.style.transition = ""; }
+  const l0 = b.offsetLeft, w0 = b.offsetWidth;
+  if (!indPlaced || rm()) {                           // первая постановка и режим без анимаций: сразу на место
+    ind.style.transition = "none";
+    ind.style.left = l0 + "px"; ind.style.width = w0 + "px"; ind.style.opacity = "1";
+    void ind.offsetWidth; ind.style.transition = "";
+    indPlaced = true; ind._l = l0; ind._w = w0;
+    return;
+  }
+  if (ind._l === l0 && ind._w === w0) return;
+  /* морфинг: «таблетка» сначала вытягивается до новой вкладки, затем пружиной собирается на ней */
+  const l = Math.min(ind._l, l0), r = Math.max(ind._l + ind._w, l0 + w0);
+  clearTimeout(ind._t);
+  ind.style.transition = "left .17s cubic-bezier(.4,0,.6,1),width .17s cubic-bezier(.4,0,.6,1)";
+  ind.style.left = l + "px"; ind.style.width = (r - l) + "px";
+  ind._t = setTimeout(() => { ind.style.transition = ""; ind.style.left = l0 + "px"; ind.style.width = w0 + "px"; }, 160);
+  ind._l = l0; ind._w = w0;
 }
 try { new ResizeObserver(moveInd).observe($("#tabs")); } catch (e) {}
 try { if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveInd); } catch (e) {}
@@ -2914,14 +3090,17 @@ function fit() {
   const side = Math.max(160, Math.min(fr.width, fr.height));
   bezel.style.width = side + "px";
   bezel.style.height = side + "px";
-  const r = mb.getBoundingClientRect();
-  if (!r.width) return;
+  if (!mb.clientWidth) return;                       // clientWidth: не зависит от 3D-наклона рамки
   D = devicePixelRatio || 1;
-  W = r.width; Hh = r.height;
+  W = mb.clientWidth; Hh = mb.clientHeight;
   cv.width = W * D; cv.height = Hh * D;
   base = Math.min(W, Hh);
   V = { s: base, x: W / 2 - base / 2, y: Hh / 2 - base / 2 };
+  Vt = { s: V.s, x: V.x, y: V.y };
 }
+/* камера: Vt — цель, V плавно догоняет её каждый кадр (инерция зума и перетаскивания) */
+let Vt = { s: 1, x: 0, y: 0 }, fling = null;
+const flyTo = (u, v) => { Vt.x = W / 2 - u * Vt.s; Vt.y = Hh / 2 - v * Vt.s; };
 new ResizeObserver(fit).observe(frame);
 addEventListener("resize", fit);
 fit();
@@ -2930,44 +3109,54 @@ const sx = u => V.x + u * V.s;
 const sy = v => V.y + v * V.s;
 
 function zoomAt(f, cx, cy) {
-  const n = Math.max(base * .55, Math.min(base * 7, V.s * f)), k = n / V.s;
-  V.x = cx - (cx - V.x) * k;
-  V.y = cy - (cy - V.y) * k;
-  V.s = n;
+  const n = Math.max(base * .55, Math.min(base * 7, Vt.s * f)), k = n / Vt.s;
+  Vt.x = cx - (cx - Vt.x) * k;
+  Vt.y = cy - (cy - Vt.y) * k;
+  Vt.s = n;
+  fling = null;
 }
 
+/* offsetX/offsetY — координаты в системе самого canvas: верны и при 3D-наклоне рамки */
 cv.addEventListener("wheel", e => {
   e.preventDefault();
-  const r = mb.getBoundingClientRect();
-  zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
+  zoomAt(Math.exp(-Math.max(-240, Math.min(240, e.deltaY)) * 0.0017), e.offsetX, e.offsetY);
 }, { passive: false });
 
 cv.onpointerdown = e => {
-  drag = { x: e.clientX, y: e.clientY, vx: V.x, vy: V.y };
+  drag = { x: e.offsetX, y: e.offsetY, vx: Vt.x, vy: Vt.y, lx: e.offsetX, ly: e.offsetY, lt: performance.now(), sx: 0, sy: 0 };
+  fling = null;
   cv.setPointerCapture(e.pointerId);
   cv.classList.add("drag");
 };
 cv.onpointermove = e => {
-  const r = mb.getBoundingClientRect();
-  hover = { x: e.clientX - r.left, y: e.clientY - r.top };
+  hover = { x: e.offsetX, y: e.offsetY };
   if (drag) {
-    V.x = drag.vx + e.clientX - drag.x;
-    V.y = drag.vy + e.clientY - drag.y;
+    Vt.x = drag.vx + e.offsetX - drag.x;
+    Vt.y = drag.vy + e.offsetY - drag.y;
+    const now = performance.now(), dt = Math.max(1, now - drag.lt);
+    drag.sx = drag.sx * .6 + (e.offsetX - drag.lx) / dt * 16 * .4;   // сглаженная скорость, px/кадр
+    drag.sy = drag.sy * .6 + (e.offsetY - drag.ly) / dt * 16 * .4;
+    drag.lx = e.offsetX; drag.ly = e.offsetY; drag.lt = now;
   }
   const u = (hover.x - V.x) / V.s, v = (hover.y - V.y) / V.s;
   $("#hov").textContent = (u >= 0 && u < 1 && v >= 0 && v < 1) ? gridOf(u, v) : "—";
 };
+cv.onpointerleave = () => { if (!drag) hover = null; };
 cv.onpointerup = e => {
-  if (drag && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 4 && hover) {
+  if (drag && Math.hypot(e.offsetX - drag.x, e.offsetY - drag.y) < 4 && hover) {
     // click → copy grid
     const u = (hover.x - V.x) / V.s, v = (hover.y - V.y) / V.s;
     if (u >= 0 && u < 1 && v >= 0 && v < 1) {
       copyText(gridOf(u, v));
+      pings.push({ u, v, t: performance.now() });
     }
+  } else if (drag && !rm() && performance.now() - drag.lt < 60 && Math.hypot(drag.sx, drag.sy) > 1.5) {
+    fling = { x: drag.sx, y: drag.sy };               // бросок: карта доезжает по инерции
   }
   drag = null;
   cv.classList.remove("drag");
 };
+const pings = [];                                     // круги от клика по карте
 
 $("#team").onclick = e => {
   const el = e.target.closest(".mate");
@@ -2976,8 +3165,7 @@ $("#team").onclick = e => {
   el.classList.add("active");
   const m = team[el.dataset.i];
   if (!m || m.u == null) return;
-  V.x = (W / 2) - m.u * V.s;
-  V.y = (Hh / 2) - m.v * V.s;
+  fling = null; flyTo(m.u, m.v);
 };
 
 $("#btnCenter").onclick = () => {
@@ -2988,28 +3176,80 @@ $("#btnCenter").onclick = () => {
   const list = alive.length ? alive : placed;
   const cu = list.reduce((s, m) => s + m.u, 0) / list.length;
   const cvv = list.reduce((s, m) => s + m.v, 0) / list.length;
-  V.x = (W / 2) - cu * V.s;
-  V.y = (Hh / 2) - cvv * V.s;
+  fling = null; flyTo(cu, cvv);
 };
 
 $("#btnResetZoom").onclick = () => {
-  V = { s: base, x: W / 2 - base / 2, y: Hh / 2 - base / 2 };
+  fling = null;
+  Vt = { s: base, x: W / 2 - base / 2, y: Hh / 2 - base / 2 };
 };
 
+let FONT = "";
+const mapFont = () => FONT || (FONT = getComputedStyle(document.body).fontFamily);
 function tag(txt, x, y, col) {
-  ctx.font = "500 10px " + getComputedStyle(document.body).fontFamily;
-  const w = ctx.measureText(txt).width + 9;
-  ctx.fillStyle = "rgba(6,6,5,.88)";
-  ctx.fillRect(x, y - 7, w, 15);
+  ctx.font = "500 10px " + mapFont();
+  const w = ctx.measureText(txt).width + 10;
+  ctx.fillStyle = "rgba(6,6,5,.86)";
+  ctx.beginPath(); ctx.roundRect(x, y - 8, w, 16, 4); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.14)"; ctx.lineWidth = 1; ctx.stroke();
   ctx.fillStyle = col;
   ctx.textAlign = "left";
-  ctx.fillText(txt, x + 4, y + 3);
+  ctx.fillText(txt, x + 5, y + 3.5);
 }
 
-function draw() {
-  if (!W) { requestAnimationFrame(draw); return; }
+/* плавное движение и следы: показанная позиция догоняет настоящую, путь затухает за TRAIL_MS */
+const TRAIL_MS = 150000, disp = new Map();
+function track(key, u, v, now, snap) {
+  let d = disp.get(key);
+  if (!d) { d = { u, v, trail: [] }; disp.set(key, d); }
+  if (Math.hypot(u - d.u, v - d.v) > .22) { d.u = u; d.v = v; d.trail.length = 0; }   // телепорт/респавн: след рвём
+  const k = snap ? 1 : .1;
+  d.u += (u - d.u) * k; d.v += (v - d.v) * k;
+  const last = d.trail[d.trail.length - 1];
+  if (!last || Math.hypot(d.u - last.u, d.v - last.v) > .0022) d.trail.push({ u: d.u, v: d.v, t: now });
+  while (d.trail.length && (now - d.trail[0].t > TRAIL_MS || d.trail.length > 110)) d.trail.shift();
+  d.seen = now;
+  return d;
+}
+function drawTrail(d, now, w, amp) {
+  const tr = d.trail;
+  if (tr.length < 1) return;
+  ctx.lineCap = "round"; ctx.lineWidth = w;
+  for (let i = 1; i <= tr.length; i++) {
+    const a = tr[i - 1], b = i < tr.length ? tr[i] : d, age = 1 - (now - a.t) / TRAIL_MS;
+    if (age <= 0) continue;
+    ctx.strokeStyle = "rgba(255,255,255," + (age * age * amp).toFixed(3) + ")";
+    ctx.beginPath(); ctx.moveTo(sx(a.u), sy(a.v)); ctx.lineTo(sx(b.u), sy(b.v)); ctx.stroke();
+  }
+}
+/* мягкое свечение точки: один заранее отрисованный спрайт вместо shadowBlur в каждом кадре */
+const glowSpr = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,.55)"); gr.addColorStop(.35, "rgba(255,255,255,.16)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return c;
+})();
+const glow = (x, y, r, a) => { ctx.globalAlpha = a; ctx.drawImage(glowSpr, x - r, y - r, r * 2, r * 2); ctx.globalAlpha = 1; };
+const mapVisible = () => !document.hidden && $("#v-map").classList.contains("on");
+let zlTxt = "";
+
+function draw(now) {
+  now = now || performance.now();
+  if (!W || !mapVisible()) { setTimeout(() => requestAnimationFrame(draw), 250); return; }   // скрыто: не рисуем
+  const still = rm();
+
+  /* камера догоняет цель; бросок после перетаскивания затухает трением */
+  if (fling) {
+    Vt.x += fling.x; Vt.y += fling.y; fling.x *= .92; fling.y *= .92;
+    if (Math.hypot(fling.x, fling.y) < .15) fling = null;
+  }
+  const kc = still ? 1 : drag ? .45 : .16;
+  V.s += (Vt.s - V.s) * kc; V.x += (Vt.x - V.x) * kc; V.y += (Vt.y - V.y) * kc;
+  if (Math.abs(Vt.s - V.s) < .01) { V.s = Vt.s; V.x = Vt.x; V.y = Vt.y; }
+
   ctx.setTransform(D, 0, 0, D, 0, 0);
-  ctx.fillStyle = "#060606";
+  ctx.fillStyle = "#050505";
   ctx.fillRect(0, 0, W, Hh);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
@@ -3021,7 +3261,7 @@ function draw() {
   ctx.strokeStyle = mapImage ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.06)";
   ctx.beginPath();
   for (let i = 0; i <= n; i++) {
-    const x = V.x + i * c, y = V.y + i * c;
+    const x = Math.round(V.x + i * c) + .5, y = Math.round(V.y + i * c) + .5;
     ctx.moveTo(x, V.y); ctx.lineTo(x, V.y + V.s);
     ctx.moveTo(V.x, y); ctx.lineTo(V.x + V.s, y);
   }
@@ -3031,14 +3271,14 @@ function draw() {
   ctx.strokeRect(V.x, V.y, V.s, V.s);
   if (!mapImage) {
     ctx.fillStyle = "rgba(255,255,255,.32)";
-    ctx.font = "italic 13px " + getComputedStyle(document.body).fontFamily;
+    ctx.font = "italic 13px " + mapFont();
     ctx.textAlign = "center";
     ctx.fillText($t("mapEmpty"), V.x + V.s / 2, V.y + V.s / 2);
   }
 
   if (c > 22) {
     ctx.fillStyle = "rgba(255,255,255,.26)";
-    ctx.font = "500 9.5px " + getComputedStyle(document.body).fontFamily;
+    ctx.font = "500 9.5px " + mapFont();
     ctx.textAlign = "center";
     for (let i = 0; i < n; i++) {
       const x = V.x + i * c + c / 2, y = V.y + i * c + c / 2;
@@ -3047,44 +3287,89 @@ function draw() {
     }
   }
 
+  /* радар: медленный луч вокруг центра карты, только поверх самой карты */
+  if (!still) {
+    const cx = V.x + V.s / 2, cy = V.y + V.s / 2, ang = (now / 9000) * Math.PI * 2;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(V.x, V.y, V.s, V.s); ctx.clip();
+    const cg = ctx.createConicGradient(ang, cx, cy);
+    cg.addColorStop(0, "rgba(255,255,255,0)"); cg.addColorStop(.82, "rgba(255,255,255,0)");
+    cg.addColorStop(.995, "rgba(255,255,255,.075)"); cg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = cg;
+    ctx.beginPath(); ctx.arc(cx, cy, V.s * .72, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  const seenIdx = {};
   markers.forEach(mk => {
     if (mk.u == null) return;
-    const x = sx(mk.u), y = sy(mk.v);
     if (mk.type === "shop") {
+      const x = sx(mk.u), y = sy(mk.v);
       ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 7); ctx.fillStyle = "#e8e8e8"; ctx.fill();
-    } else if (mk.type === "cargo") {
-      ctx.save(); ctx.translate(x, y); ctx.rotate(mk.rot || 0);
-      ctx.fillStyle = "#f0f0f0"; ctx.beginPath();
-      ctx.moveTo(0, -7); ctx.lineTo(4.5, 5); ctx.lineTo(-4.5, 5);
-      ctx.closePath(); ctx.fill(); ctx.restore();
-      tag($t("evCargo"), x + 10, y - 13, "#f0f0f0");
-    } else {
+      return;
+    }
+    if (mk.type === "monument") {
+      const x = sx(mk.u), y = sy(mk.v);
       ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 1;
-      ctx.strokeRect(x - 3.5, y - 3.5, 7, 7);
+      ctx.strokeRect(Math.round(x) - 3.5, Math.round(y) - 3.5, 7, 7);
       if (mk.name) {
-        ctx.font = "500 9.5px " + getComputedStyle(document.body).fontFamily;
+        ctx.font = "500 9.5px " + mapFont();
         ctx.textAlign = "left";
         const tw = ctx.measureText(mk.name).width;
         ctx.fillStyle = "rgba(6,6,5,.72)"; ctx.fillRect(x + 6, y - 6, tw + 6, 14);
         ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fillText(mk.name, x + 9, y + 4);
       }
+      return;
     }
+    /* подвижные ивенты: карго, чинук, патрулька (ящик стоит на месте, но тоже пульсирует) */
+    const kind = mk.type === "cargo" ? "cargo" : /chinook/i.test(mk.name || "") ? "chinook" : /heli/i.test(mk.name || "") ? "heli" : "crate";
+    seenIdx[kind] = (seenIdx[kind] || 0) + 1;
+    const d = track("ev:" + kind + seenIdx[kind], mk.u, mk.v, now, still);
+    if (kind !== "crate") drawTrail(d, now, kind === "cargo" ? 3 : 2, .42);
+    const x = sx(d.u), y = sy(d.v);
+    if (!still) {
+      const ph = (now / 1600) % 1;
+      ctx.beginPath(); ctx.arc(x, y, 8 + ph * 18, 0, 7);
+      ctx.strokeStyle = "rgba(255,255,255," + ((1 - ph) * .35).toFixed(3) + ")"; ctx.lineWidth = 1.2; ctx.stroke();
+    }
+    glow(x, y, 20, .7);
+    ctx.save(); ctx.translate(x, y);
+    if (kind === "cargo") {
+      ctx.rotate(mk.rot || 0);
+      ctx.fillStyle = "#f4f4f4"; ctx.beginPath();
+      ctx.moveTo(0, -8); ctx.lineTo(4.5, -2); ctx.lineTo(4.5, 6); ctx.lineTo(-4.5, 6); ctx.lineTo(-4.5, -2);
+      ctx.closePath(); ctx.fill();
+    } else if (kind === "crate") {
+      ctx.fillStyle = "#f0f0f0"; ctx.fillRect(-4, -4, 8, 8);
+      ctx.strokeStyle = "#050505"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.stroke();
+    } else {
+      ctx.fillStyle = "#f4f4f4"; ctx.beginPath(); ctx.arc(0, 0, 3.4, 0, 7); ctx.fill();
+      ctx.rotate(still ? .6 : now / 90);              // винт
+      ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 1.4; ctx.beginPath();
+      ctx.moveTo(-9, 0); ctx.lineTo(9, 0);
+      if (kind === "chinook") { ctx.moveTo(0, -9); ctx.lineTo(0, 9); }
+      ctx.stroke();
+    }
+    ctx.restore();
+    tag(kind === "cargo" ? $t("evCargo") : kind === "chinook" ? $t("evChinook") : kind === "heli" ? $t("evHeli") : (mk.name || ""), x + 12, y - 14, "#f0f0f0");
   });
 
   team.forEach((m, i) => {
     if (m.u == null) return;
-    const x = sx(m.u), y = sy(m.v);
+    const d = track("tm:" + (m.id != null ? m.id : m.steamId != null ? m.steamId : m.n), m.u, m.v, now, still);
+    drawTrail(d, now, 2, m.alive ? .5 : .2);
+    const x = sx(d.u), y = sy(d.v);
     if (m.alive) {
-      const r = 7 + ((t / 24 + i * 8) % 20);
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, 7);
-      ctx.strokeStyle = "rgba(255,255,255,.2)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x, y, 4.5, 0, 7);
-      ctx.fillStyle = "#f0f0f0";
-      ctx.fill();
+      if (!still) {
+        for (let k = 0; k < 2; k++) {                   // два расходящихся кольца в противофазе
+          const ph = ((now / 2200) + i * .37 + k * .5) % 1;
+          ctx.beginPath(); ctx.arc(x, y, 6 + ph * 20, 0, 7);
+          ctx.strokeStyle = "rgba(255,255,255," + ((1 - ph) * .3).toFixed(3) + ")"; ctx.lineWidth = 1; ctx.stroke();
+        }
+      }
+      glow(x, y, 16, .8);
+      ctx.beginPath(); ctx.arc(x, y, 4.6, 0, 7); ctx.fillStyle = "#f4f4f4"; ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = 1; ctx.stroke();
       tag(m.n, x + 10, y - 13, "#f0f0f0");
     } else {
       ctx.strokeStyle = "#e8e8e8";
@@ -3093,20 +3378,37 @@ function draw() {
       ctx.moveTo(x - 5, y - 5); ctx.lineTo(x + 5, y + 5);
       ctx.moveTo(x + 5, y - 5); ctx.lineTo(x - 5, y + 5);
       ctx.stroke();
-      tag(m.n, x + 9, y + 16, "#e8e8e8");
+      tag(m.n, x + 9, y + 16, "#cfcfcf");
     }
   });
+  if (disp.size > 64) disp.forEach((d, k) => { if (now - d.seen > TRAIL_MS) disp.delete(k); });
 
-  if (hover && !drag) {
-    ctx.strokeStyle = "rgba(255,255,255,.08)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(hover.x, 0); ctx.lineTo(hover.x, Hh);
-    ctx.moveTo(0, hover.y); ctx.lineTo(W, hover.y);
-    ctx.stroke();
+  /* отклик на клик: квадрат скопирован */
+  for (let i = pings.length - 1; i >= 0; i--) {
+    const p = pings[i], a = (now - p.t) / 650;
+    if (a >= 1 || still) { pings.splice(i, 1); continue; }
+    const e = 1 - Math.pow(1 - a, 3);
+    ctx.beginPath(); ctx.arc(sx(p.u), sy(p.v), 4 + e * 26, 0, 7);
+    ctx.strokeStyle = "rgba(255,255,255," + ((1 - a) * .7).toFixed(3) + ")"; ctx.lineWidth = 1.5; ctx.stroke();
   }
 
-  $("#zl").textContent = (V.s / base).toFixed(1) + "×";
+  if (hover && !drag) {
+    ctx.strokeStyle = "rgba(255,255,255,.1)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(Math.round(hover.x) + .5, 0); ctx.lineTo(Math.round(hover.x) + .5, Hh);
+    ctx.moveTo(0, Math.round(hover.y) + .5); ctx.lineTo(W, Math.round(hover.y) + .5);
+    ctx.stroke();
+    /* подсветка квадрата под курсором */
+    const gu = Math.floor((hover.x - V.x) / c), gv = Math.floor((hover.y - V.y) / c);
+    if (gu >= 0 && gv >= 0 && gu < n && gv < n) {
+      ctx.fillStyle = "rgba(255,255,255,.045)";
+      ctx.fillRect(V.x + gu * c, V.y + gv * c, c, c);
+    }
+  }
+
+  const z = (V.s / base).toFixed(1) + "×";
+  if (z !== zlTxt) { zlTxt = z; $("#zl").textContent = z; }
   t++;
   requestAnimationFrame(draw);
 }
@@ -3322,7 +3624,7 @@ function setNum(el, v, suf) {
   if (rm() || from === to) { el.innerHTML = to + suf; return; }
   const t0 = performance.now(), dur = 700;
   const step = now => {
-    const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    const k = Math.max(0, Math.min(1, (now - t0) / dur)), e = 1 - Math.pow(1 - k, 3);
     el.innerHTML = Math.round(from + (to - from) * e) + suf;
     if (k < 1) el._r = requestAnimationFrame(step);
   };
@@ -4290,6 +4592,139 @@ initPacks();
 loadChat();
 applyLang();
 fixSw();
+
+/* ============ v4 · свет, глубина, живой фон ============ */
+(function () {
+  try { Object.assign(L.ru, { tipTilt: "Наклон карты (3D)" }); Object.assign(L.en, { tipTilt: "Tilt map (3D)" }); } catch (e) {}
+
+  /* ---- фон: перспективная сетка и пыль. Полразрешения, ~30 кадров/с, стоит при скрытом окне и выключенных анимациях ---- */
+  const bg = document.createElement("canvas");
+  bg.id = "bgfx"; bg.setAttribute("aria-hidden", "true");
+  document.body.insertBefore(bg, document.body.firstChild);
+  const g = bg.getContext("2d");
+  let bw = 0, bh = 0, px = .5, py = .5, tx = .5, ty = .5, bgRaf = 0, bgLast = 0;
+  const dust = Array.from({ length: 46 }, () => ({ x: Math.random(), y: Math.random(), z: .25 + Math.random() * .75, s: Math.random() * 6.28 }));
+  const bgSize = () => { bw = bg.width = Math.max(2, Math.round(innerWidth * .6)); bh = bg.height = Math.max(2, Math.round(innerHeight * .6)); };
+  function bgDraw(now) {
+    bgRaf = 0;
+    if (document.hidden || rm()) return;                       // пауза: цикл не перезапускаем
+    bgRaf = requestAnimationFrame(bgDraw);
+    if (now - bgLast < 32) return;
+    bgLast = now;
+    px += (tx - px) * .05; py += (ty - py) * .05;              // медленный параллакс от курсора
+    g.clearRect(0, 0, bw, bh);
+    const y0 = bh * (.44 + (py - .5) * .05), vx = bw * (.5 + (px - .5) * .16);
+    const ph = (now / 5200) % 1, N = 13;
+    g.lineWidth = 1;
+    for (let side = 0; side < 2; side++) {                     // 0 — пол, 1 — потолок (слабее)
+      const dir = side ? -1 : 1, edge = side ? 0 : bh, amp = side ? .055 : .13;
+      for (let i = 0; i < N; i++) {
+        const z = (i + ph) / N, y = y0 + (edge - y0) * z * z;
+        g.strokeStyle = "rgba(255,255,255," + (z * amp).toFixed(3) + ")";
+        g.beginPath(); g.moveTo(0, Math.round(y) + .5); g.lineTo(bw, Math.round(y) + .5); g.stroke();
+      }
+      const gr = g.createLinearGradient(0, y0, 0, edge);
+      gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(1, "rgba(255,255,255," + amp + ")");
+      g.strokeStyle = gr;
+      g.beginPath();
+      for (let j = -14; j <= 14; j++) { g.moveTo(vx + j * 3, y0 + dir * 2); g.lineTo(vx + j * bw / 6.5, edge); }
+      g.stroke();
+    }
+    for (const d of dust) {                                    // пыль: ближние частицы смещаются сильнее
+      d.y -= .00022 * d.z; if (d.y < -.02) { d.y = 1.02; d.x = Math.random(); }
+      const x = ((d.x + (px - .5) * .06 * d.z + Math.sin(now / 4000 + d.s) * .004) % 1 + 1) % 1 * bw, y = d.y * bh;
+      g.fillStyle = "rgba(255,255,255," + (.1 + .3 * d.z * (.6 + .4 * Math.sin(now / 900 + d.s))).toFixed(3) + ")";
+      g.fillRect(x, y, d.z > .7 ? 2 : 1, d.z > .7 ? 2 : 1);
+    }
+    const vg = g.createRadialGradient(bw / 2, y0, bh * .1, bw / 2, y0, Math.max(bw, bh) * .75);   // виньетка: края тонут в чёрном
+    vg.addColorStop(0, "rgba(7,7,7,0)"); vg.addColorStop(1, "rgba(7,7,7,.96)");
+    g.fillStyle = vg; g.fillRect(0, 0, bw, bh);
+    const hz = g.createLinearGradient(0, y0 - bh * .07, 0, y0 + bh * .07);                          // туман на горизонте
+    hz.addColorStop(0, "rgba(7,7,7,0)"); hz.addColorStop(.5, "rgba(7,7,7,.92)"); hz.addColorStop(1, "rgba(7,7,7,0)");
+    g.fillStyle = hz; g.fillRect(0, y0 - bh * .07, bw, bh * .14);
+  }
+  const bgKick = () => { if (!bgRaf && !document.hidden && !rm()) bgRaf = requestAnimationFrame(bgDraw); };
+  bgSize(); addEventListener("resize", bgSize);
+  document.addEventListener("visibilitychange", bgKick);
+  new MutationObserver(bgKick).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  requestAnimationFrame(() => { bg.classList.add("on"); bgKick(); });
+
+  /* ---- свет за курсором и наклон мелких карточек ---- */
+  const SEL = ".panel,.card,.storage-card,.cam-card,.alarm-card,.pf-panel,.pf-tile,.tk-key,.stats>div";
+  const TILT = ".storage-card,.cam-card,.alarm-card,.pf-tile,.stats>div,.tk-key";
+  let lit = [], pend = null, litRaf = 0;
+  const unlight = el => { el.classList.remove("lit"); el.style.removeProperty("--rx"); el.style.removeProperty("--ry"); };
+  function light() {
+    litRaf = 0;
+    const e = pend;
+    if (!e || rm()) { lit.forEach(unlight); lit = []; return; }
+    const list = [], a = e.target && e.target.closest ? e.target.closest(SEL) : null;
+    if (a) { list.push(a); const b = a.parentElement && a.parentElement.closest(SEL); if (b) list.push(b); }
+    lit.forEach(el => { if (list.indexOf(el) < 0) unlight(el); });
+    list.forEach((el, i) => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--mx", (e.clientX - r.left).toFixed(0) + "px");
+      el.style.setProperty("--my", (e.clientY - r.top).toFixed(0) + "px");
+      el.classList.add("lit");
+      if (i === 0 && r.width && el.matches(TILT)) {
+        el.style.setProperty("--ry", (((e.clientX - r.left) / r.width - .5) * 8).toFixed(2) + "deg");
+        el.style.setProperty("--rx", (-((e.clientY - r.top) / r.height - .5) * 8).toFixed(2) + "deg");
+      }
+    });
+    lit = list;
+  }
+  document.addEventListener("pointermove", e => {
+    pend = e; tx = e.clientX / innerWidth; ty = e.clientY / innerHeight;
+    if (!litRaf) litRaf = requestAnimationFrame(light);
+  }, { passive: true });
+  document.documentElement.addEventListener("pointerleave", () => { pend = null; if (!litRaf) litRaf = requestAnimationFrame(light); });
+
+  /* ---- карта: параллакс рамки и кнопка наклона ---- */
+  frame.addEventListener("pointermove", e => {
+    if (rm() || drag) return;
+    const r = frame.getBoundingClientRect();
+    bezel.style.setProperty("--by", (((e.clientX - r.left) / r.width - .5) * 5).toFixed(2) + "deg");
+    bezel.style.setProperty("--bx", (-((e.clientY - r.top) / r.height - .5) * 5).toFixed(2) + "deg");
+  }, { passive: true });
+  frame.addEventListener("pointerleave", () => { bezel.style.removeProperty("--bx"); bezel.style.removeProperty("--by"); });
+  const tb = document.createElement("button");
+  tb.id = "btnTilt"; tb.type = "button"; tb.textContent = "3D"; tb.dataset.ti = "tipTilt";
+  tb.dataset.tip = $t("tipTilt"); tb.setAttribute("aria-label", tb.dataset.tip);
+  $("#btnCenter").parentNode.appendChild(tb);
+  const setTilt = on => { bezel.classList.toggle("tilt", on); tb.classList.toggle("on", on); tb.setAttribute("aria-pressed", on); LS.set("hollow_tilt", on ? "1" : "0"); };
+  tb.onclick = () => setTilt(!bezel.classList.contains("tilt"));
+  if (LS.get("hollow_tilt") === "1") setTilt(true);
+
+  /* ---- профиль: числа в плитках набегают от нуля ---- */
+  function countUp(el) {
+    if (el.children.length) return;
+    const txt = el.textContent, m = txt.match(/^(\d[\d\s  .,]*\d|\d)(\D*)$/);
+    if (!m) return;
+    const s = m[1], dm = s.match(/([.,])(\d{1,2})$/);
+    const dec = dm && s.split(dm[1]).length === 2 ? dm[2].length : 0, dch = dec ? dm[1] : "";
+    const intPart = dec ? s.slice(0, -dec - 1) : s, grp = (intPart.match(/\D/) || [""])[0];
+    const to = parseFloat(intPart.replace(/\D/g, "") + (dec ? "." + dm[2] : ""));
+    if (!isFinite(to) || to === 0) return;
+    const fmtN = v => {
+      const f = v.toFixed(dec).split(".");
+      return (grp ? f[0].replace(/\B(?=(\d{3})+$)/g, grp) : f[0]) + (dec ? dch + f[1] : "") + m[2];
+    };
+    const t0 = performance.now(), dur = 950;
+    const step = now => {
+      if (!el.isConnected) return;
+      const k = Math.max(0, Math.min(1, (now - t0) / dur));
+      el.textContent = k < 1 ? fmtN(to * (1 - Math.pow(1 - k, 3))) : txt;
+      if (k < 1) requestAnimationFrame(step);
+    };
+    el.textContent = fmtN(0);
+    requestAnimationFrame(step);
+  }
+  const pfHost = $("#pfBody");
+  if (pfHost) new MutationObserver(() => {
+    if (rm()) return;
+    pfHost.querySelectorAll(".pf-tile b,.pf-rr b").forEach(countUp);
+  }).observe(pfHost, { childList: true });
+})();
 </script>
 </body>
 </html>
