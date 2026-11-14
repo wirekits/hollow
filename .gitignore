@@ -1,0 +1,11 @@
+# сборка
+/target/
+src-tauri/target/
+src-tauri/gen/
+# локальное
+*.bak
+*.log
+.claude/
+# локальные рабочие документы (в репозиторий не входят)
+CONTRACT.md
+PLAN.md
