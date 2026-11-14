@@ -35,6 +35,22 @@ enum Cmd {
     Watch(u32),
 }
 
+/// Последний состав команды из Rust+: (когда, SteamID -> в сети). Нужен профилю игрока:
+/// Steam не показывает «в Rust» при закрытых игровых данных, а Rust+ про тимейтов знает точно.
+static TEAM_SEEN: Mutex<Option<(i64, HashMap<String, bool>)>> = Mutex::new(None);
+/// Снимок команды старше этого не доверяем (опрос каждые 5 с, значит соединение пропало).
+const TEAM_FRESH_MS: i64 = 60_000;
+
+/// В сети ли тимейт по данным Rust+. None — не тимейт или свежих данных нет.
+pub fn team_online(steam_id: &str) -> Option<bool> {
+    let g = TEAM_SEEN.lock().ok()?;
+    let (at, m) = g.as_ref()?;
+    if now_ms() - at > TEAM_FRESH_MS {
+        return None;
+    }
+    m.get(steam_id).copied()
+}
+
 const ENTITY_SWITCH: i32 = 1;
 const ENTITY_STORAGE: i32 = 3;
 
@@ -173,6 +189,9 @@ impl Session {
         };
         for a in alerts::diff_team(self.team_snap.as_deref(), &next, &grid) {
             fire(app, a);
+        }
+        if let Ok(mut g) = TEAM_SEEN.lock() {
+            *g = Some((now_ms(), t.members.iter().map(|m| (m.steam_id.to_string(), m.is_online)).collect()));
         }
         self.team_snap = Some(next);
         self.last_team = Some(t);

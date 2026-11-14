@@ -586,6 +586,45 @@ pub async fn resolve_query_addr(api_key: Option<&str>, ip: &str, app_port: u16, 
     probe_query_addr(ip, app_port, expect_name, timeout).await
 }
 
+/// Фильтр master list по имени сервера. `\` разделяет поля фильтра, поэтому заменяем его на `*` (любой текст).
+pub fn name_filter(name: &str) -> String {
+    format!("\\appid\\252490\\name_match\\{}", name.trim().replace('\\', "*"))
+}
+
+/// Из результатов поиска по имени: точное совпадение имени (без пробелов/регистра), иначе единственный.
+pub fn pick_by_exact_name(list: &[MasterServer], name: &str) -> Option<SocketAddr> {
+    let norm = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_lowercase();
+    let n = norm(name);
+    if n.is_empty() {
+        return None;
+    }
+    let exact: Vec<&MasterServer> = list.iter().filter(|s| norm(&s.name) == n).collect();
+    let chosen = match exact.as_slice() {
+        [one] => *one,
+        [] if list.len() == 1 => &list[0],
+        _ => return None, // несколько одноимённых — не угадываем
+    };
+    chosen.addr.parse().ok()
+}
+
+/// Query-адрес сервера пачки по одному имени: при подключении через ретранслятор Facepunch
+/// ip сервера неизвестен, а имя Rust+ отдаёт (AppInfo.name совпадает с именем в master list).
+pub async fn resolve_by_name(api_key: Option<&str>, name: &str, timeout: Duration) -> Option<SocketAddr> {
+    let k = usable_key(api_key)?;
+    let client = reqwest::Client::builder().timeout(timeout).build().ok()?;
+    let resp = client
+        .get("https://api.steampowered.com/IGameServersService/GetServerList/v1/")
+        .query(&[("key", k), ("filter", name_filter(name).as_str()), ("limit", "20")])
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let v: serde_json::Value = resp.json().await.ok()?;
+    pick_by_exact_name(&parse_master_list(&v), name)
+}
+
 /// Query-адрес по игровому адресу `ip:gameport` (его показывает Steam в gameserverip у игрока).
 pub async fn resolve_game_addr(api_key: Option<&str>, game_ip_port: &str, timeout: Duration) -> Option<SocketAddr> {
     let (ip, port) = game_ip_port.rsplit_once(':')?;
@@ -607,6 +646,17 @@ mod master_tests {
     const SAMPLE: &str = r#"{"response":{"servers":[
       {"addr":"80.232.242.125:28017","gameport":28015,"name":"[EU] BLACKTIDE x1000 | Custom Map","appid":252490},
       {"addr":"80.232.242.125:28117","gameport":28115,"name":"Second Box","appid":252490}]}}"#;
+
+    #[test]
+    fn by_name() {
+        let v: serde_json::Value = serde_json::from_str(SAMPLE).unwrap();
+        let l = parse_master_list(&v);
+        assert_eq!(pick_by_exact_name(&l, "second  box").map(|a| a.port()), Some(28117));
+        assert_eq!(pick_by_exact_name(&l, "Second"), None); // частичное при нескольких — нет
+        assert_eq!(pick_by_exact_name(&l[..1], "что угодно").map(|a| a.port()), Some(28017));
+        assert_eq!(name_filter(" Blood Rust - Black [nolimit, x2] "), "\\appid\\252490\\name_match\\Blood Rust - Black [nolimit, x2]");
+        assert_eq!(name_filter("a\\b"), "\\appid\\252490\\name_match\\a*b");
+    }
 
     #[test]
     fn parses_real_shape() {

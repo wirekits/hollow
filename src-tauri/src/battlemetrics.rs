@@ -180,8 +180,32 @@ pub async fn lookup_player(app: AppHandle, query: String) -> Result<(), String> 
             g.server_name.clone(),
         )
     };
-    let srv = label_server(&presence.srv, pack.as_ref().map(|(i, p)| (i.as_str(), *p)), server_name.as_deref());
-    let online = presence.in_rust || src.is_some();
+    let mut srv = label_server(&presence.srv, pack.as_ref().map(|(i, p)| (i.as_str(), *p)), server_name.as_deref());
+    // тимейт: Rust+ знает онлайн точно, даже при закрытых игровых данных в Steam
+    let team_on = crate::rustplus::team_online(&id) == Some(true);
+    if team_on && srv.is_empty() {
+        srv = server_name.clone().unwrap_or_default(); // пусто — во фронт уйдёт «Rust»
+    }
+    let mut online = presence.in_rust || src.is_some() || team_on;
+    if !online && presence.steam_on {
+        online = true;
+        srv = STEAM_ONLY.to_string();
+    }
+    // Steam молчит («Невидимка» в Steam) (закрытые игровые данные) — разово ищем ник в списке игроков серверов пачки (A2S)
+    let mut a2s_since = None;
+    if !online {
+        let (servers, _) = collect_servers(&app, server_name.as_deref(), &[]).await;
+        if !servers.is_empty() {
+            let (ok, _) = query_all(&servers).await;
+            let mut all = names.clone();
+            merge_names(&mut all, [nick.clone()]);
+            if let Some(hit) = find_match(&all, &ok, now) {
+                online = true;
+                srv = hit.srv;
+                a2s_since = Some(hit.since);
+            }
+        }
+    }
     if let Some(o) = profile.as_object_mut() {
         o.insert("aliases".into(), json!(names));
         o.insert("aliasesDetailed".into(), json!(detailed));
@@ -192,7 +216,7 @@ pub async fn lookup_player(app: AppHandle, query: String) -> Result<(), String> 
         let servers = if online {
             let name = open.map(|s| s.srv.clone()).filter(|s| !s.is_empty()).unwrap_or(srv);
             json!([{"name": if name.is_empty() { "Rust".to_string() } else { name },
-                    "online": true, "since": open.map_or(now, |s| s.start)}])
+                    "online": true, "since": open.map(|s| s.start).or(a2s_since).unwrap_or(now)}])
         } else {
             json!([])
         };
@@ -527,6 +551,8 @@ enum ResolveKind<'a> {
     Pack(&'a str, u16, Option<&'a str>),
     /// gameserverip из Steam ("ip:игровой порт").
     Game(&'a str),
+    /// Сервер пачки через ретранслятор: ip нет, ищем по имени из Rust+.
+    Name(&'a str),
 }
 
 /// query-адрес A2S с кэшем: найденный ~1 ч, неудача ~5 мин (чтобы не дёргать master list каждый опрос).
@@ -549,6 +575,7 @@ async fn cached_resolve(app: &AppHandle, cache_key: &str, kind: ResolveKind<'_>)
             crate::a2s::resolve_query_addr(key.as_deref(), ip, port, name, RESOLVE_TIMEOUT).await
         }
         ResolveKind::Game(raw) => crate::a2s::resolve_game_addr(key.as_deref(), raw, RESOLVE_TIMEOUT).await,
+        ResolveKind::Name(n) => crate::a2s::resolve_by_name(key.as_deref(), n, RESOLVE_TIMEOUT).await,
     };
     app.state::<BmState>().inner.lock().unwrap().probe.insert(cache_key.to_string(), (found, now));
     found
@@ -581,6 +608,12 @@ async fn collect_servers(
         if let Some(a) = cached_resolve(app, &ck, ResolveKind::Pack(&ip, port, server_name)).await {
             let l = server_name.map(String::from).unwrap_or_else(|| a.to_string());
             pack_entry = Some((a, l));
+        }
+    } else if let Some(name) = server_name.filter(|n| !n.trim().is_empty()) {
+        // ретранслятор: ip сервера пачки неизвестен, находим его в master list Steam по имени
+        total += 1;
+        if let Some(a) = cached_resolve(app, &format!("name:{name}"), ResolveKind::Name(name)).await {
+            pack_entry = Some((a, name.to_string()));
         }
     }
     let mut eph = Vec::new();
@@ -682,10 +715,15 @@ async fn poll_once(app: &AppHandle) -> Result<(), PollErr> {
                     }
                 }
             }
-            let steam_obs = pr.as_ref().map(|p| {
-                let srv = label_server(&p.srv, pack.as_ref().map(|(i, p)| (i.as_str(), *p)), server_name.as_deref());
-                (p.in_rust, srv)
-            });
+            let team_on = t.steam_id.as_deref().and_then(crate::rustplus::team_online);
+            let steam_obs = match team_on {
+                // тимейт: Rust+ знает точно, это важнее Steam
+                Some(true) => Some((true, server_name.clone().unwrap_or_else(|| "Rust".into()))),
+                _ => pr.as_ref().map(|p| {
+                    let srv = label_server(&p.srv, pack.as_ref().map(|(i, p)| (i.as_str(), *p)), server_name.as_deref());
+                    steam_seen(p, srv)
+                }),
+            };
             let hit = find_match(&names, &ok_servers, now);
             let ss = g.sessions.entry(k.clone()).or_default();
             let open_srv = ss.last().filter(|s| s.stop.is_none()).map(|s| s.srv.clone());
@@ -900,6 +938,23 @@ struct Presence {
     /// Сырое gameserverip ("" если нет или "0.0.0.0:0").
     srv: String,
     public: bool,
+    /// В сети в Steam (personastate > 0). Steam отдаёт его и при скрытых игровых данных,
+    /// когда gameid не виден; не виден только у тех, кто сам поставил «Невидимка»/«Не в сети».
+    steam_on: bool,
+}
+
+/// Подпись «где», когда Steam говорит «в сети», а игру не показывает (скрытые игровые данные).
+const STEAM_ONLY: &str = "в Steam · игра скрыта";
+
+/// (в сети, где) по Steam: Rust с сервером, иначе просто «в Steam».
+fn steam_seen(p: &Presence, rust_srv: String) -> (bool, String) {
+    if p.in_rust {
+        (true, rust_srv)
+    } else if p.steam_on {
+        (true, STEAM_ONLY.to_string())
+    } else {
+        (false, String::new())
+    }
 }
 
 /// Из объекта игрока GetPlayerSummaries. «В Rust» = gameid == "252490".
@@ -917,7 +972,8 @@ fn parse_presence(p: &Value) -> Presence {
         .unwrap_or("")
         .to_string();
     let public = matches!(p.get("communityvisibilitystate").and_then(|v| v.as_i64()), Some(3) | Some(5));
-    Presence { in_rust, srv: if in_rust { srv } else { String::new() }, public }
+    let steam_on = p.get("personastate").and_then(|v| v.as_i64()).map_or(false, |s| s > 0);
+    Presence { in_rust, srv: if in_rust { srv } else { String::new() }, public, steam_on: steam_on || in_rust }
 }
 
 /// Подпись сервера: если ip совпадает с сервером пачки (порт Rust+ = игровой или игровой + 67,
@@ -1403,11 +1459,17 @@ mod tests {
     fn presence_detection() {
         let p = j(r#"{"steamid":"1","communityvisibilitystate":3,"personastate":1,
             "gameid":"252490","gameextrainfo":"Rust","gameserverip":"1.2.3.4:28015"}"#);
-        assert_eq!(parse_presence(&p), Presence { in_rust: true, srv: "1.2.3.4:28015".into(), public: true });
+        assert_eq!(parse_presence(&p), Presence { in_rust: true, srv: "1.2.3.4:28015".into(), public: true, steam_on: true });
         let other = j(r#"{"communityvisibilitystate":3,"gameid":"730","gameserverip":"5.5.5.5:27015"}"#);
-        assert_eq!(parse_presence(&other), Presence { in_rust: false, srv: "".into(), public: true });
+        assert_eq!(parse_presence(&other), Presence { in_rust: false, srv: "".into(), public: true, steam_on: false });
         let empty = j(r#"{"communityvisibilitystate":3,"gameserverip":"0.0.0.0:0"}"#);
-        assert_eq!(parse_presence(&empty), Presence { in_rust: false, srv: "".into(), public: true });
+        assert_eq!(parse_presence(&empty), Presence { in_rust: false, srv: "".into(), public: true, steam_on: false });
+        // живой случай: игровые данные скрыты — gameid нет, но personastate 1 (в сети)
+        let hidden = parse_presence(&j(r#"{"communityvisibilitystate":3,"personastate":1}"#));
+        assert!(!hidden.in_rust && hidden.steam_on);
+        assert_eq!(steam_seen(&hidden, String::new()), (true, STEAM_ONLY.to_string()));
+        let off = parse_presence(&j(r#"{"communityvisibilitystate":3,"personastate":0}"#));
+        assert_eq!(steam_seen(&off, String::new()), (false, String::new()));
         let rust_no_srv = j(r#"{"communityvisibilitystate":3,"gameid":"252490","gameserverip":"0.0.0.0:0"}"#);
         let r = parse_presence(&rust_no_srv);
         assert!(r.in_rust && r.srv.is_empty());
