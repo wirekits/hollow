@@ -3378,7 +3378,10 @@ function draw(now) {
   ctx.fillRect(0, 0, W, Hh);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  if (mapImage) ctx.drawImage(mapImage, V.x, V.y, V.s, V.s);
+  if (mapImage) {
+    if (mapCrop) ctx.drawImage(mapImage, mapCrop.x, mapCrop.y, mapCrop.w, mapCrop.h, V.x, V.y, V.s, V.s);
+    else ctx.drawImage(mapImage, V.x, V.y, V.s, V.s);
+  }
   else { ctx.fillStyle = "#0b0b0b"; ctx.fillRect(V.x, V.y, V.s, V.s); }
 
   const n = Math.ceil(MAP / CELL), c = V.s / MAP * CELL;
@@ -3768,10 +3771,18 @@ function setTeam(list) {
   renderTeam(); renderTrk(trkFilter()); renderFarm();
 }
 function setMarkers(list) { fill(markers, list); }
-function setMap(src) {
-  if (!src) { mapImage = null; return; }
+/* карта: строка data-URL или { src, w, h, margin } — margin = океанские поля в пикселях картинки, мир только внутри */
+let mapCrop = null;
+function setMap(m) {
+  const src = m && typeof m === "object" ? m.src : m;
+  if (!src) { mapImage = null; mapCrop = null; return; }
   const im = new Image();
-  im.onload = () => { mapImage = im; };
+  im.onload = () => {
+    const mg = m && typeof m === "object" ? Math.max(0, +m.margin || 0) : 0;
+    const iw = im.naturalWidth, ih = im.naturalHeight;
+    mapCrop = mg > 0 && iw > 2 * mg && ih > 2 * mg ? { x: mg, y: mg, w: iw - 2 * mg, h: ih - 2 * mg } : null;
+    mapImage = im;
+  };
   im.src = src;
 }
 function setDevices(list) { fill(deviceCats, list); syncGroupsFromCats(); renderSw(); }
@@ -3808,7 +3819,11 @@ try {
     on("alarms", setAlarms); on("alarm_history", setAlarmHist); on("vendings", setVendings); on("merchant", setMerchant);
     on("targets", setTargets); on("player_profile", setProfile); on("storage_boxes", setBoxes);
     on("storage_update", p => farmPoll(p.id, p.items)); on("team_chat", p => say(p.author, p.text));
-    on("rp_status", p => { rp = { state: (p && p.state) || "closed", msg: (p && p.msg) || "" }; renderRp(); });
+    on("rp_status", p => {
+      rp = { state: (p && p.state) || "closed", msg: (p && p.msg) || "" }; renderRp();
+      // связь потеряна: шапка не должна показывать «подключено» по старому server_info
+      if (rp.state !== "connected" && server.connected) { server.connected = false; renderServer(); }
+    });
     on("alert", p => { try { onAlert(p); } catch (e) {} });
     on("profile_changed", p => { if (p && p.id && p.id !== PID) { LS.set("hollow_active", p.id); location.reload(); } });
   }

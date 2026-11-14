@@ -31,7 +31,12 @@ const MAX_PENDING: usize = 20;
 enum Cmd {
     SetDevice(u32, bool),
     Chat(String),
+    /// Подписаться на устройство (getEntityInfo): без этого сервер не шлёт его изменения.
+    Watch(u32),
 }
+
+const ENTITY_SWITCH: i32 = 1;
+const ENTITY_STORAGE: i32 = 3;
 
 struct Conn {
     handle: JoinHandle<()>,
@@ -100,8 +105,8 @@ struct Session {
     last_alarms: Option<serde_json::Value>,
 }
 
-fn forms_decay(m: &BTreeMap<u32, i64>) -> serde_json::Value {
-    alerts::decay_form(m, now_ms() / 1000)
+fn forms_decay(m: &BTreeMap<u32, i64>, names: &HashMap<u32, String>) -> serde_json::Value {
+    alerts::decay_form(m, now_ms() / 1000, names)
 }
 
 fn fmt_hhmm(ms: i64) -> String {
@@ -191,7 +196,7 @@ impl Session {
     fn on_alarm_value(&mut self, app: &AppHandle, id: u32, on: bool) {
         let now = now_ms();
         if self.alarm.on_value(id, on, now) {
-            fire(app, alerts::alarm_alert(id));
+            fire(app, alerts::alarm_alert(&alerts::label(&self.alarm.names, id, "Аларм")));
             if self.raid.record(now) {
                 self.alarm.push_history(now, "Возможный рейд: серия срабатываний алярмов".into());
                 fire(app, alerts::raid_alert(alerts::RAID_HITS));
@@ -212,17 +217,20 @@ impl Session {
 
     /// Монитор шкафа: protectionExpiry (unix сек) -> decay-алерты и событие `decay`.
     fn on_protection(&mut self, app: &AppHandle, id: u32, p: &AppEntityPayload) {
-        if !p.has_protection || p.protection_expiry == 0 {
+        if !p.has_protection {
             if self.decay.remove(&id).is_some() {
-                emit(app, "decay", forms_decay(&self.decay));
+                emit(app, "decay", forms_decay(&self.decay, &self.alarm.names));
             }
             return;
         }
-        let exp = p.protection_expiry as i64;
+        // защита есть, но expiry 0 — ресурсов на апкип нет, шкаф уже гниёт: это самый срочный случай,
+        // а не «нет данных» (раньше такой шкаф молча пропадал из списка)
+        let now_s = now_ms() / 1000;
+        let exp = if p.protection_expiry == 0 { now_s } else { p.protection_expiry as i64 };
         self.decay.insert(id, exp);
-        emit(app, "decay", forms_decay(&self.decay));
-        let left = exp - now_ms() / 1000;
-        if let Some(a) = alerts::decay_alert(id, left) {
+        emit(app, "decay", forms_decay(&self.decay, &self.alarm.names));
+        let left = exp - now_s;
+        if let Some(a) = alerts::decay_alert(&alerts::label(&self.alarm.names, id, "Шкаф"), left) {
             if self.decay_gate.allow(id, &a.prio, now_ms()) {
                 fire(app, a);
             }
@@ -292,13 +300,19 @@ impl Session {
         if let Some(map) = r.map {
             self.map_loaded = true;
             if !map.jpg_image.is_empty() {
+                // картинка включает океанские поля (oceanMargin пикселей с каждой стороны): мир 0..mapSize
+                // занимает только середину. Без поправки маркеры съезжают к центру — фронт обрезает поля.
                 let b64 = base64::engine::general_purpose::STANDARD.encode(&map.jpg_image);
-                emit(app, "map_image", format!("data:image/jpeg;base64,{b64}"));
+                emit(
+                    app,
+                    "map_image",
+                    serde_json::json!({
+                        "src": format!("data:image/jpeg;base64,{b64}"),
+                        "w": map.width, "h": map.height, "margin": map.ocean_margin.max(0),
+                    }),
+                );
             }
-            // если getInfo ещё не пришёл, берём размер мира из карты (width включает океанские поля)
-            if self.map_size <= 0.0 && map.width > 0 {
-                self.map_size = (map.width as i64 - 2 * map.ocean_margin as i64).max(1) as f32;
-            }
+            // размер мира берём только из getInfo: width/oceanMargin карты в пикселях, не в метрах
             self.monuments = map.monuments;
             self.emit_team(app);
             self.emit_markers(app);
@@ -309,10 +323,27 @@ impl Session {
         if let (Kind::EntityInfo(id), Some(ei)) = (kind, r.entity_info) {
             self.entity_types.insert(id, ei.r#type);
             let pend = self.pending_vals.remove(&id);
-            if ei.r#type == alerts::ENTITY_ALARM {
-                if let Some(on) = pend {
-                    self.on_alarm_value(app, id, on);
+            match ei.r#type {
+                ENTITY_SWITCH => {
+                    // начальное состояние выключателя: дальше его меняют broadcast entityChanged
+                    let on = ei.payload.as_ref().and_then(|p| p.value).or(pend).unwrap_or(false);
+                    self.devices.insert(id, on);
+                    emit(app, "devices", forms::devices_form(&self.devices));
                 }
+                ENTITY_STORAGE => {
+                    if let Some(p) = ei.payload.as_ref() {
+                        if let Some(v) = forms::storage_update_form(id, p) {
+                            emit(app, "storage_update", v);
+                        }
+                        self.on_protection(app, id, p);
+                    }
+                }
+                t if t == alerts::ENTITY_ALARM => {
+                    if let Some(on) = pend {
+                        self.on_alarm_value(app, id, on);
+                    }
+                }
+                _ => {}
             }
         }
         if let Some(m) = r.map_markers {
@@ -372,6 +403,29 @@ async fn run_session(
 ) -> String {
     let (mut sink, mut stream) = ws.split();
     let mut s = Session::new(player_id, token);
+    // сопряжённые устройства пачки: подписываемся на каждое (getEntityInfo), мониторы хранилищ — в «фарм»
+    let paired = app
+        .try_state::<crate::profiles::ProfilesState>()
+        .and_then(|st| st.active_profile())
+        .map(|p| p.devices)
+        .unwrap_or_default();
+    let boxes: Vec<serde_json::Value> = paired
+        .iter()
+        .filter(|d| d.kind == "storage")
+        .map(|d| serde_json::json!({ "id": d.id, "name": d.name }))
+        .collect();
+    emit(app, "storage_boxes", boxes);
+    s.alarm.names = paired
+        .iter()
+        .filter_map(|d| d.id.trim().parse::<u32>().ok().map(|id| (id, d.name.clone())))
+        .collect();
+    for d in &paired {
+        if let Ok(id) = d.id.trim().parse::<u32>() {
+            if s.info_requested.insert(id) {
+                s.want_info.push(id);
+            }
+        }
+    }
     let mk = |d| {
         let mut i = tokio::time::interval(d);
         i.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -408,6 +462,13 @@ async fn run_session(
                 Some(Cmd::Chat(text)) => Some(s.request(Kind::Other, |r| {
                     r.send_team_message = Some(AppSendMessage { message: text });
                 })),
+                Some(Cmd::Watch(id)) => {
+                    s.info_requested.insert(id);
+                    Some(s.request(Kind::EntityInfo(id), |r| {
+                        r.entity_id = Some(id);
+                        r.get_entity_info = Some(AppEmpty {});
+                    }))
+                }
             },
             _ = t_team.tick() => Some(s.request(Kind::Team, |r| r.get_team_info = Some(AppEmpty {}))),
             _ = t_markers.tick() => Some(s.request(Kind::Markers, |r| r.get_map_markers = Some(AppEmpty {}))),
@@ -426,7 +487,11 @@ async fn run_session(
                 return "ошибка записи".into();
             }
         }
-        for id in std::mem::take(&mut s.want_info) {
+        // по 4 запроса за проход: у Rust+ лимит запросов, а пачка из 20+ устройств разом
+        // упирается и в MAX_PENDING (тогда сессия рвётся с «сервер не отвечает»)
+        let n = s.want_info.len().min(4);
+        let batch: Vec<u32> = s.want_info.drain(..n).collect();
+        for id in batch {
             let m = s.request(Kind::EntityInfo(id), |r| {
                 r.entity_id = Some(id);
                 r.get_entity_info = Some(AppEmpty {});
@@ -554,6 +619,14 @@ fn send_cmd(app: &AppHandle, cmd: Cmd) -> Result<(), String> {
     match g.as_ref() {
         Some(c) if c.connected.load(Ordering::SeqCst) => c.tx.send(cmd).map_err(|_| "нет соединения".to_string()),
         _ => Err("нет соединения с сервером".into()),
+    }
+}
+
+/// Подписка на только что сопряжённое устройство (из pairing). Без соединения — тихо ничего:
+/// при следующем подключении сессия сама подпишется на все устройства пачки.
+pub fn watch_entity(app: &AppHandle, id: &str) {
+    if let Ok(id) = id.trim().parse::<u32>() {
+        let _ = send_cmd(app, Cmd::Watch(id));
     }
 }
 

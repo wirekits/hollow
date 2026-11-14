@@ -279,9 +279,16 @@ async fn apply_server(app: &AppHandle, sp: notif::ServerPair) {
 
 fn apply_entity(app: &AppHandle, ep: notif::EntityPair) {
     let profiles = app.state::<crate::profiles::ProfilesState>();
-    if let (Some(active), Some(ip), Some(port)) = (profiles.active_server(), ep.ip.as_ref(), ep.port) {
-        // сервер через ретранслятор хранится без ip/port — сверять не с чем
-        if !active.ip.is_empty() && (active.ip != *ip || active.port != port) {
+    if let Some(active) = profiles.active_server() {
+        // сверка сервера: по id ретранслятора, если он есть у обоих, иначе по ip:порт
+        let other = match (active.relay_id.trim(), ep.relay_id.as_deref().map(str::trim)) {
+            (a, Some(b)) if !a.is_empty() && !b.is_empty() => a != b,
+            _ => match (ep.ip.as_ref(), ep.port) {
+                (Some(ip), Some(port)) if !active.ip.is_empty() => active.ip != *ip || active.port != port,
+                _ => false,
+            },
+        };
+        if other {
             emit_state(app, "waiting", "Устройство с другого сервера пропущено (не совпадает с активной пачкой)");
             return;
         }
@@ -290,6 +297,19 @@ fn apply_entity(app: &AppHandle, ep: notif::EntityPair) {
     match profiles.upsert_active_device(dev) {
         Ok(()) => {
             let _ = app.emit("pair_device", json!({ "id": ep.id, "name": ep.name, "kind": ep.kind }));
+            crate::rustplus::watch_entity(app, &ep.id);
+            if ep.kind == "storage" {
+                // список мониторов для «фарма» обновляем сразу, не дожидаясь переподключения
+                let boxes: Vec<serde_json::Value> = profiles
+                    .active_profile()
+                    .map(|p| p.devices)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter(|d| d.kind == "storage")
+                    .map(|d| json!({ "id": d.id, "name": d.name }))
+                    .collect();
+                let _ = app.emit("storage_boxes", boxes);
+            }
         }
         Err(e) => emit_state(app, "error", &format!("Устройство получено, но не сохранено: {e}")),
     }

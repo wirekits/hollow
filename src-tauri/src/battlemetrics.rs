@@ -297,7 +297,8 @@ pub async fn track_remove(app: AppHandle, query: String) -> Result<(), String> {
     {
         let st = app.state::<BmState>();
         let mut g = st.inner.lock().unwrap();
-        g.targets.retain(|t| !t.label.eq_ignore_ascii_case(&query));
+        // фронт удаляет по SteamID, если он известен, а label — то, что вводили (ссылка/ник)
+        g.targets.retain(|t| !t.label.eq_ignore_ascii_case(&query) && t.steam_id.as_deref() != Some(query.as_str()));
         if g.targets.is_empty() {
             if let Some(h) = g.task.take() {
                 h.abort();

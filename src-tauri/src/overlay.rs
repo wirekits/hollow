@@ -150,8 +150,19 @@ pub async fn overlay_toggle(app: AppHandle) -> Result<bool, String> {
         return Ok(true);
     }
 
-    let mons = monitors(&app);
-    let primary = mons.first().copied().unwrap_or(Rect { x: 0, y: 0, w: 1920, h: 1080 });
+    let mut mons = monitors(&app);
+    // первый в списке Windows — не обязательно главный экран: ставим главный первым
+    // (fit_to_screens возвращает потерянное окно на mons[0])
+    let primary = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| Rect { x: m.position().x, y: m.position().y, w: m.size().width, h: m.size().height })
+        .or_else(|| mons.first().copied())
+        .unwrap_or(Rect { x: 0, y: 0, w: 1920, h: 1080 });
+    if let Some(i) = mons.iter().position(|m| *m == primary) {
+        mons.swap(0, i);
+    }
     let cfg = match load_cfg(&app) {
         Some(c) => fit_to_screens(c, &mons),
         None => default_cfg(primary),

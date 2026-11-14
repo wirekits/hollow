@@ -29,6 +29,8 @@ pub struct EntityPair {
     pub kind: String, // switch | alarm | storage
     pub ip: Option<String>,
     pub port: Option<u16>,
+    /// id сервера в ретрансляторе (`body.id`), по нему сверяем сервер, когда ip нет.
+    pub relay_id: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -101,6 +103,7 @@ pub fn parse(app_data: &[(String, String)]) -> Result<Notif, String> {
                 kind: kind.into(),
                 ip: s(&body, "ip"),
                 port: s(&body, "port").and_then(|p| p.parse().ok()),
+                relay_id: s(&body, "id"),
             }))
         }
         other => Ok(Notif::Ignored(format!("pairing/{}", other.unwrap_or("?")))),

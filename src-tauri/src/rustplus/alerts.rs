@@ -106,8 +106,16 @@ impl Default for RaidWindow {
     }
 }
 
-pub fn alarm_alert(id: u32) -> Alert {
-    alert("alarm", "med", "Аларм", format!("Сработал аларм #{id}"))
+/// Имя устройства из сопряжения, иначе «{prefix} #id».
+pub fn label(names: &HashMap<u32, String>, id: u32, prefix: &str) -> String {
+    match names.get(&id).map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        Some(n) => n.to_string(),
+        None => format!("{prefix} #{id}"),
+    }
+}
+
+pub fn alarm_alert(name: &str) -> Alert {
+    alert("alarm", "med", "Аларм", format!("Сработал аларм: {name}"))
 }
 
 pub fn raid_alert(hits: usize) -> Alert {
@@ -126,6 +134,8 @@ struct AlarmRec {
 pub struct AlarmTracker {
     alarms: BTreeMap<u32, AlarmRec>,
     history: VecDeque<(i64, String)>,
+    /// имена из сопряжённых устройств пачки (id -> имя из игры)
+    pub names: HashMap<u32, String>,
 }
 
 impl AlarmTracker {
@@ -136,7 +146,8 @@ impl AlarmTracker {
         rec.last_val = Some(val);
         if trig {
             rec.last_on = Some(now_ms);
-            self.push_history(now_ms, format!("Аларм #{id} сработал"));
+            let name = label(&self.names, id, "Аларм");
+            self.push_history(now_ms, format!("{name}: сработал"));
         }
         trig
     }
@@ -154,7 +165,7 @@ impl AlarmTracker {
             .map(|(id, r)| {
                 let ago = r.last_on.map(|t| (now_ms - t).max(0));
                 let hot = ago.map(|a| a <= ALARM_HOT_MS).unwrap_or(false);
-                json!({ "name": format!("Аларм #{id}"), "hot": hot, "t": ago.map(|a| a / 60_000).unwrap_or(0), "prio": "med" })
+                json!({ "name": label(&self.names, *id, "Аларм"), "hot": hot, "t": ago.map(|a| a / 60_000).unwrap_or(0), "prio": "med" })
             })
             .collect();
         Value::Array(list)
@@ -196,10 +207,10 @@ pub fn decay_level(left_secs: i64) -> &'static str {
     }
 }
 
-pub fn decay_alert(id: u32, left_secs: i64) -> Option<Alert> {
+pub fn decay_alert(name: &str, left_secs: i64) -> Option<Alert> {
     let prio = decay_prio(left_secs)?;
     let l = left_secs.max(0);
-    let text = format!("Шкаф #{id}: защита закончится через {} ч {} мин", l / 3600, (l % 3600) / 60);
+    let text = format!("{name}: защита закончится через {} ч {} мин", l / 3600, (l % 3600) / 60);
     Some(alert("decay", prio, "Шкаф распадается", text))
 }
 
@@ -224,13 +235,13 @@ impl DecayGate {
 }
 
 /// setDecay: [{ name, level, left (часов) }] по известным шкафам (id -> unix-секунда конца защиты).
-pub fn decay_form(expiries: &BTreeMap<u32, i64>, now_secs: i64) -> Value {
+pub fn decay_form(expiries: &BTreeMap<u32, i64>, now_secs: i64, names: &HashMap<u32, String>) -> Value {
     Value::Array(
         expiries
             .iter()
             .map(|(id, exp)| {
                 let left = exp - now_secs;
-                json!({ "name": format!("Шкаф #{id}"), "level": decay_level(left), "left": (left.max(0)) / 3600 })
+                json!({ "name": label(names, *id, "Шкаф"), "level": decay_level(left), "left": (left.max(0)) / 3600 })
             })
             .collect(),
     )
@@ -311,10 +322,10 @@ mod tests {
         assert_eq!(decay_level(10 * 3600), "ok");
         assert_eq!(decay_level(2 * 3600), "warn");
         assert_eq!(decay_level(60), "bad");
-        let a = decay_alert(7, 5400 + 6 * 3600 - 6 * 3600).unwrap();
+        let a = decay_alert("Шкаф #7", 5400 + 6 * 3600 - 6 * 3600).unwrap();
         assert_eq!((a.kind.as_str(), a.prio.as_str()), ("decay", "med"));
         assert!(a.text.contains("1 ч 30 мин"));
-        assert!(decay_alert(7, 9 * 3600).is_none());
+        assert!(decay_alert("Шкаф #7", 9 * 3600).is_none());
     }
 
     #[test]
@@ -340,6 +351,9 @@ mod tests {
         assert_eq!(f[0]["t"], 2);
         let f2 = t.alarms_form(4_000 + 10 * 60_000);
         assert_eq!(f2[0]["hot"], false);
+        assert_eq!(f[0]["name"], "Аларм #5");
+        t.names.insert(5, "Дверь ядро".into());
+        assert_eq!(t.alarms_form(0)[0]["name"], "Дверь ядро");
         let h = t.history_form(&|ms| format!("t{ms}"));
         assert_eq!(h.as_array().unwrap().len(), 2);
         assert_eq!(h[0]["t"], "t4000");
@@ -349,8 +363,11 @@ mod tests {
     fn decay_form_shape() {
         let mut e = BTreeMap::new();
         e.insert(3u32, 1000 + 2 * 3600);
-        let f = decay_form(&e, 1000);
+        let f = decay_form(&e, 1000, &HashMap::new());
         assert_eq!(f[0]["level"], "warn");
         assert_eq!(f[0]["left"], 2);
+        assert_eq!(f[0]["name"], "Шкаф #3");
+        let names: HashMap<u32, String> = [(3u32, "TC main".to_string())].into_iter().collect();
+        assert_eq!(decay_form(&e, 1000, &names)[0]["name"], "TC main");
     }
 }
