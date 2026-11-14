@@ -341,6 +341,21 @@ pub fn profile_update(
     if let Some(v @ Value::Object(_)) = patch.get("notify") {
         apply_notify(&mut p.notify, v)?;
     }
+    if let Some(Value::Array(arr)) = patch.get("watch_servers") {
+        let mut out: Vec<crate::types::WatchServer> = Vec::new();
+        for it in arr.iter().take(50) {
+            let addr = it.get("addr").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let label = it.get("label").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let ok = addr.rsplit_once(':').map(|(h, p)| !h.is_empty() && p.parse::<u16>().map(|n| n > 0).unwrap_or(false)).unwrap_or(false);
+            if !ok {
+                return Err(format!("watch_servers: некорректный адрес «{addr}», нужен ip:порт"));
+            }
+            if !out.iter().any(|s| s.addr == addr) {
+                out.push(crate::types::WatchServer { addr, label });
+            }
+        }
+        p.watch_servers = out;
+    }
     if let Some(v @ Value::Object(_)) = patch.get("automation") {
         p.automation = serde_json::from_value(v.clone()).map_err(|e| format!("automation: {e}"))?;
     }

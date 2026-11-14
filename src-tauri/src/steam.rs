@@ -10,6 +10,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
+pub mod stats;
+
+const MAX_FRIENDS_LIST: usize = 6;
 const RUST_APPID: u32 = 252490;
 const BASE: &str = "https://api.steampowered.com";
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -106,6 +109,20 @@ pub fn parse_owned_hours(v: &Value, appid: u32) -> Option<i64> {
 pub fn parse_friend_ids(v: &Value) -> Option<Vec<String>> {
     let arr = v.pointer("/friendslist/friends")?.as_array()?;
     Some(arr.iter().filter_map(|f| f.get("steamid").and_then(|s| s.as_str()).map(String::from)).collect())
+}
+
+/// До MAX_FRIENDS_LIST друзей [{name, avatar}]; без профиля имя = steamid, аватар = null.
+pub fn friends_list(ids: &[String], sums: &HashMap<String, Summary>) -> Vec<Value> {
+    ids.iter()
+        .take(MAX_FRIENDS_LIST)
+        .map(|id| {
+            let s = sums.get(id);
+            json!({
+                "name": s.and_then(|s| s.personaname.clone()).unwrap_or_else(|| id.clone()),
+                "avatar": s.and_then(|s| s.avatar.clone()),
+            })
+        })
+        .collect()
 }
 
 fn stat(map: &HashMap<String, i64>, keys: &[&str]) -> Option<i64> {
@@ -450,6 +467,19 @@ async fn enrich_with_key(key: &str, sid: &str, base: Value, now: i64) -> Value {
             .collect();
         put("friends", json!(names));
         put("friendsCount", json!(ids.len()));
+        put("friendsList", json!(friends_list(ids, &friend_names)));
+    }
+
+    // сырая статистика и производные (наша оценка, см. steam/stats.rs)
+    match stats.as_ref().ok().and_then(stats::raw_stats) {
+        Some(raw) => {
+            put("stats", stats::stats_json(&raw));
+            put("derived", stats::derive(&raw));
+        }
+        None => {
+            put("stats", Value::Null);
+            put("derived", Value::Null);
+        }
     }
 
     if let Some(b) = &bans_v {
@@ -573,6 +603,17 @@ mod tests {
         let partial = parse_rust_stats(&json!({"playerstats":{"stats":[{"name":"kill_player","value":3}]}})).unwrap();
         assert_eq!(partial.deaths, None);
         assert!(parse_rust_stats(&json!({"playerstats":{"error":"Profile is not public"}})).is_none());
+    }
+
+    #[test]
+    fn friends_list_limits_and_fallback() {
+        let ids: Vec<String> = (1..=9).map(|i| i.to_string()).collect();
+        let mut m = HashMap::new();
+        m.insert("1".to_string(), Summary { personaname: Some("Al".into()), avatar: Some("u".into()), ..Default::default() });
+        let l = friends_list(&ids, &m);
+        assert_eq!(l.len(), 6);
+        assert_eq!(l[0], json!({"name":"Al","avatar":"u"}));
+        assert_eq!(l[1], json!({"name":"2","avatar":null}));
     }
 
     #[test]

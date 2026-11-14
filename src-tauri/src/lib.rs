@@ -1,3 +1,4 @@
+mod a2s;
 mod automation;
 mod battlemetrics;
 mod notify;

@@ -55,6 +55,14 @@ pub struct AutomationCfg {
     pub groups: Vec<DeviceGroup>,
 }
 
+/// Игровой сервер под наблюдением (опрос A2S): ищем в списке игроков ники целей.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WatchServer {
+    pub addr: String,    // "ip:port" (query-порт или игровой порт, см. модуль a2s)
+    pub label: String,   // имя для показа (можно пустое)
+}
+
 /// Устройство, полученное через pairing (имя из игры).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -68,6 +76,8 @@ pub struct PairedDevice {
 pub struct Profile {
     #[serde(default)]
     pub devices: Vec<PairedDevice>,
+    #[serde(default)]
+    pub watch_servers: Vec<WatchServer>,
     pub id: String,                       // uuid v4
     pub name: String,                     // «пачка»
     pub server: Option<ServerCreds>,
