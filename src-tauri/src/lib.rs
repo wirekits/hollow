@@ -12,6 +12,7 @@ mod rustplus;
 mod shell;
 mod steam;
 mod types;
+mod updater;
 mod watcher;
 
 use tauri::Manager;
@@ -23,6 +24,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| shell::raise_main(app)))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(profiles::ProfilesState::default())
         .manage(rustplus::RpState::default())
@@ -38,6 +40,7 @@ pub fn run() {
             let token = st.active_bm_token();
             let h2 = app.handle().clone();
             tauri::async_runtime::spawn(async move { items::init(&h2).await });
+            updater::start(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 battlemetrics::configure(&handle, token).await;
@@ -79,6 +82,8 @@ pub fn run() {
             deaths::deaths_list,
             deaths::deaths_clear,
             logfile::log_open,
+            updater::update_check,
+            updater::update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running hollow++");

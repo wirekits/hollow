@@ -25,6 +25,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "publisher": "hollow++",
     "shortDescription": "hollow++",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
@@ -35,6 +36,13 @@
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM0NzI5ODZEQzQ2QjMwNkMKUldSc01HdkViWmh5eEp5dE9PbGl4QnF1NjNPUVN6eDJmN0dXdWRMVlN1SngxYXFTV0kraHpPRkYK",
+      "endpoints": ["https://github.com/wirekits/hollow/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
     }
   }
 }

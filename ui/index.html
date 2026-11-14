@@ -1588,6 +1588,7 @@ html.no-motion #bgfx{display:none}
               </div></div>
             </div>
             <div class="pack-row"><button type="button" class="btn ghost" id="logOpen" data-t="logOpen">Открыть папку с логами</button></div>
+            <div class="pack-row"><button type="button" class="btn ghost" id="updCheck" data-t="updCheck">Проверить обновления</button><small id="updVer"></small><button type="button" class="btn" id="updInstall" hidden></button></div>
 
             <small class="err" id="pErr" role="alert"></small>
             <div class="cfg-sub" data-t="setPair">Rust+</div>
@@ -4238,6 +4239,7 @@ Object.assign(L.ru, {
   wFriendTip: "Когда цель примет заявку, её игра и сервер будут видны даже при скрытых игровых данных (режим «для друзей»)", errWLogin: "Введи логин и пароль",
   shopWatchT: "Алерт по магазинам", shopWatchHint: "Предметы через запятую. Когда в магазине появится такой товар, придёт алерт «Магазин [квадрат]». Понимает с4, ракета, мс, сера, калаш и английские названия.",
   shopWatchPh: "с4, ракета, мс", logOpen: "Открыть папку с логами",
+  updCheck: "Проверить обновления", updVer: "версия {v}", updNone: "последняя версия", updInstall: "Обновить до {v}", updToast: "Вышла версия {v}: Настройки → Обновить", updBusy: "скачиваю…",
   dthT: "Смерти", dthClr: "Очистить", dthNone: "Смертей пока нет", dthMe: "Тебя убил", dthMate: "погиб", dthStat: "Стата убийцы"
 });
 Object.assign(L.en, {
@@ -4260,6 +4262,7 @@ Object.assign(L.en, {
   wFriendTip: "Once the target accepts, their game and server are visible even with friends-only game details", errWLogin: "Enter login and password",
   shopWatchT: "Shop alerts", shopWatchHint: "Items, comma separated. When a shop lists one, you get a \"Shop [grid]\" alert. Understands c4, rocket, mlrs and English item names.",
   shopWatchPh: "c4, rocket, mlrs", logOpen: "Open logs folder",
+  updCheck: "Check for updates", updVer: "version {v}", updNone: "up to date", updInstall: "Update to {v}", updToast: "Version {v} is out: Settings → Update", updBusy: "downloading…",
   dthT: "Deaths", dthClr: "Clear", dthNone: "No deaths yet", dthMe: "Killed by", dthMate: "died", dthStat: "Killer stats"
 });
 /* смерти: свои из бэкенда (deaths_list / событие deaths), тимейтов ловим по team_info в этой сессии */
@@ -4290,6 +4293,24 @@ function renderDeaths() {
     try { window.__TAURI__.event.listen("deaths", ev => { myDeaths = Array.isArray(ev.payload) ? ev.payload : []; renderDeaths(); }); } catch (e) {}
     inv("deaths_list").then(l => { myDeaths = Array.isArray(l) ? l : []; renderDeaths(); }).catch(() => {});
   }
+})();
+/* автообновление: бэкенд сам проверяет релизы и шлёт update_available, ставим только по кнопке */
+(function initUpdates() {
+  const chk = $("#updCheck"), ver = $("#updVer"), ins = $("#updInstall");
+  if (!chk || !IS_TAURI) return;
+  let notified = "";
+  const show = (r, manual) => {
+    ver.textContent = r.current ? $t("updVer").replace("{v}", r.current) + (r.available ? "" : manual ? " · " + $t("updNone") : "") : "";
+    ins.hidden = !r.available;
+    if (r.available) {
+      ins.textContent = $t("updInstall").replace("{v}", r.available);
+      if (notified !== r.available) { notified = r.available; toast($t("updToast").replace("{v}", r.available)); }
+    }
+  };
+  chk.onclick = () => { chk.disabled = true; inv("update_check").then(r => show(r, true)).catch(e => toast(String(e), "err")).finally(() => { chk.disabled = false; }); };
+  ins.onclick = () => { ins.disabled = true; ins.textContent = $t("updBusy"); inv("update_install").catch(e => { ins.disabled = false; toast(String(e), "err"); }); };
+  try { window.__TAURI__.event.listen("update_available", ev => show(ev.payload || {}, false)); } catch (e) {}
+  try { window.__TAURI__.app.getVersion().then(v => show({ current: v }, false)); } catch (e) {}
 })();
 /* аккаунт-наблюдатель: состояние приходит событием watcher_status */
 let WST = { state: "off", account: "", msg: "", guard: "", friends: 0, inRust: 0 };
