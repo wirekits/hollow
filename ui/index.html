@@ -3962,7 +3962,7 @@ SB.connect = async cfg => {
 };
 SB.fail = m => { SB.err = m; SB.setState("err"); };
 /* общий Supabase для закрытого круга пользователей (publishable-ключ публичный по замыслу; доступ к данным только по коду комнаты) */
-const SB_DEF = { url: "https://ibqjymdqxsthnzibbdzj.supabase.co", key: "sb_publishable_BN8RgwXKQNTLJWc3dok37Q_09W59uKj" };
+const SB_DEF = { url: "https://ibqjymdqxsthnzibbdzj.supabase.co", key: "sb_publishable_HBgwRXhzUoPmQ8QWZan3Ug_0uoUATPp" };
 SB.setState = s => { SB.state = s; syncRender(); };
 function syncRender() {
   const el = $("#syncSt"); if (!el) return;
