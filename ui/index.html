@@ -1120,6 +1120,129 @@ nav.tabs button.on .ic{transform:scale(1.12)}
 @keyframes appIn3{from{opacity:0;transform:perspective(1300px) translateZ(-150px)}to{opacity:1;transform:perspective(1300px) translateZ(0)}}
 html.splashing .app{animation:appIn3 .85s var(--ez) 1.5s backwards}
 html.no-motion #bgfx{display:none}
+
+/* ============ v4.1 · страницы: Хата, Магазы, Трекер, Алерт, Настройки, мастер ============ */
+/* --- шапка страницы: объёмный значок, заголовок со светом сверху, тонкая линия --- */
+.page-h{position:relative;padding-bottom:var(--sp3)}
+.page-h::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,rgba(255,255,255,.24),rgba(255,255,255,.05) 45%,transparent)}
+.page-h .pi{width:42px;height:42px;color:var(--ink);background:linear-gradient(150deg,#2b2b2b,#0e0e0e);border-color:var(--line-h);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 10px 22px -8px rgba(0,0,0,.85),0 0 24px rgba(255,255,255,.05)}
+.page-h h2{background:linear-gradient(180deg,#fff 20%,#a6a6a6);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:.01em}
+.view.on .page-h .pi{animation:piIn .75s var(--sp) .12s backwards}
+@keyframes piIn{from{opacity:0;transform:perspective(400px) rotateY(-90deg) scale(.6)}}
+
+/* --- Настройки: разделы — то же стекло и свет, открытый раздел выделен значком --- */
+.fold.sec{position:relative;background:linear-gradient(180deg,rgba(255,255,255,.028),transparent 40%),rgba(12,12,12,.8);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 40px -20px rgba(0,0,0,.7);transition:border-color .3s}
+.fold.sec::before,.ob-card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .45s ease;
+  background:radial-gradient(360px circle at var(--mx,-999px) var(--my,-999px),rgba(255,255,255,.06),transparent 62%)}
+.fold.sec::after,.ob-card::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;pointer-events:none;opacity:0;transition:opacity .45s ease;
+  background:radial-gradient(240px circle at var(--mx,-999px) var(--my,-999px),rgba(255,255,255,.55),transparent 72%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.fold.sec.open{border-color:var(--line-h)}
+.fold.sec>.fold-h .si{background:linear-gradient(150deg,#272727,#101010);box-shadow:inset 0 1px 0 rgba(255,255,255,.1);
+  transition:background .3s,color .3s,border-color .3s,box-shadow .3s,transform .5s var(--sp)}
+.fold.sec>.fold-h:hover .si{transform:scale(1.08) rotate(-5deg)}
+.fold.sec.open>.fold-h .si{background:var(--ink);color:#000;border-color:var(--ink);box-shadow:0 0 18px rgba(255,255,255,.28)}
+.fold.sec>.fold-h small{padding:2px 9px;border:1px solid var(--line-s);border-radius:var(--r-p)}
+.fold.sec>.fold-h small:empty{border:0;padding:0}
+.pair-status{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+.addbox,.search-row input{background:rgba(255,255,255,.03);box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.addbox:focus-within,.search-row input:focus{border-color:var(--ink2);box-shadow:inset 0 1px 2px rgba(0,0,0,.5),0 0 0 3px rgba(255,255,255,.08),0 0 22px rgba(255,255,255,.07)}
+
+/* --- Хата: лампочка питания, кольцо апкипа, полосы со светом --- */
+.row.dv>div:not(.tg){flex:1;min-width:0}
+.pw{flex:none;width:8px;height:8px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--dim);transition:background .3s,box-shadow .45s}
+.pw.on{background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.09),0 0 12px rgba(255,255,255,.75)}
+.row.dv b{transition:color .3s}
+.row.dv:not(:has(.tg.on)) b{color:var(--ink2)}
+.cat-block{background:rgba(255,255,255,.018);transition:border-color .3s,background .3s}
+.cat-block:hover{border-color:var(--line-s);background:rgba(255,255,255,.028)}
+.cat-block .cat-h .n{padding:2px 8px;border:1px solid var(--line-s);border-radius:var(--r-p)}
+.bar{height:5px;border-radius:3px}
+.bar i{border-radius:3px;background:linear-gradient(90deg,#7d7d7d,#f4f4f4)}
+.bar.warn i{background:linear-gradient(90deg,#bdbdbd,#fff)}
+.storage-card.dk{display:flex;align-items:center;gap:var(--sp3)}
+.dkb{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.dring{position:relative;flex:none;width:40px;height:40px;display:grid;place-items:center}
+.dring svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.dring circle{fill:none;stroke-width:2.4}
+.dring .b{stroke:rgba(255,255,255,.08)}
+.dring .f{stroke:var(--ink2);stroke-linecap:round;stroke-dasharray:100;animation:dringIn 1.1s var(--ez) .25s backwards}
+.dring b{position:relative;font:600 12px/1 var(--mono)!important}
+.dring.warn .f,.dring.bad .f{stroke:#fff}
+.dring.bad .b{stroke:rgba(255,255,255,.4);stroke-dasharray:2 3}
+.dring.bad{animation:pulse 1s ease-in-out infinite}
+@keyframes dringIn{from{stroke-dashoffset:100}}
+.cam-card small.live{color:var(--ink)}
+.cam-card small.live::before{content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.8);animation:pulse 1.2s ease-in-out infinite}
+
+/* --- Магазы: строка со световой меткой слева, квадрат подсвечивается --- */
+.mkt-row{position:relative;grid-template-columns:1fr auto minmax(80px,auto) auto;margin:0;padding:11px 10px;border-radius:var(--r-s);border-bottom:1px solid var(--line)}
+.mkt-row:last-child{border-bottom:0}
+.mkt-row::before{content:"";position:absolute;left:0;top:22%;bottom:22%;width:2px;border-radius:2px;background:#fff;box-shadow:0 0 10px rgba(255,255,255,.75);transform:scaleY(0);transition:transform .35s var(--sp)}
+.mkt-row:hover::before{transform:scaleY(1)}
+.mkt-row:hover{transform:translateX(4px);box-shadow:none;background:linear-gradient(90deg,rgba(255,255,255,.055),transparent 70%)}
+.mkt-row .mk{display:flex;align-items:baseline;gap:9px;min-width:0}
+.mkt-row .mk b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mkt-row .qty{flex:none;font:600 var(--fs-2) var(--mono);color:var(--mute);padding:1px 7px;border:1px solid var(--line-s);border-radius:var(--r-p)}
+.mkt-row .grid{min-width:52px;padding:4px 8px;background:rgba(255,255,255,.03);transition:background .25s,color .25s,border-color .25s,box-shadow .3s}
+.mkt-row:hover .grid{background:var(--ink);color:#000;border-color:var(--ink);box-shadow:0 0 16px rgba(255,255,255,.25)}
+.mkt-row .btn{width:30px;min-height:28px;padding:0}
+.mkt-row .btn .ic{transition:transform .45s var(--sp)}
+.mkt-row:hover .btn .ic{transform:translateX(3px)}
+
+/* --- Трекер: кружок с инициалом, у тех кто в сети расходится кольцо --- */
+.tav{flex:none;position:relative;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;
+  font:600 13px/1 var(--serif);font-style:normal;color:var(--mute);background:linear-gradient(150deg,#232323,#0f0f0f);border:1px dashed var(--line-s);
+  transition:border-color .3s,box-shadow .4s,color .3s}
+.tr.on .tav{color:#fff;border:1px solid rgba(255,255,255,.6);box-shadow:0 0 0 3px rgba(255,255,255,.07),0 0 18px rgba(255,255,255,.14)}
+.tr.on .tav::after{content:"";position:absolute;inset:-1px;border-radius:50%;border:1px solid #fff;opacity:0;animation:tavPing 2.4s ease-out infinite;animation-delay:var(--ph,0ms)}
+@keyframes tavPing{0%{opacity:.65;transform:scale(1)}70%,100%{opacity:0;transform:scale(1.6)}}
+.tr{padding:9px 8px}
+.tr.on .tm{color:var(--ink)}
+.tr.clk:hover .mi b{text-decoration:underline;text-decoration-color:var(--dim);text-underline-offset:3px}
+.note-inp{border-bottom-color:transparent;transition:border-color .2s}
+.tr:hover .note-inp,.note-inp:focus{border-bottom-color:var(--line-s)}
+.src{background:rgba(255,255,255,.03)}
+
+/* --- Алерт: горячие карточки светятся, история — лента времени --- */
+.alarm-card.hot{background:linear-gradient(90deg,rgba(255,255,255,.09),rgba(255,255,255,.02) 70%)}
+.alarm-card.prio-high{box-shadow:0 0 0 1px rgba(255,255,255,.22),0 0 34px rgba(255,255,255,.08)}
+#alarmHist{position:relative;padding-left:20px}
+#alarmHist::before{content:"";position:absolute;left:6px;top:14px;bottom:14px;width:1px;background:linear-gradient(180deg,rgba(255,255,255,.35),rgba(255,255,255,.05))}
+#alarmHist:has(>.empty){padding-left:0}
+#alarmHist:has(>.empty)::before{display:none}
+#alarmHist .row{position:relative}
+#alarmHist .row::after{content:"";position:absolute;left:-11.5px;top:15px;width:7px;height:7px;border-radius:50%;background:#0c0c0c;box-shadow:inset 0 0 0 1.5px var(--ink2)}
+#alarmHist .row:first-child::after{background:#fff;box-shadow:0 0 10px rgba(255,255,255,.8)}
+#alarmHist .row b{font:600 var(--fs-2) var(--mono);color:var(--mute)}
+#alarmHist .row small{font:var(--fs-3) var(--sans);color:var(--ink2)}
+
+/* --- выпадающие списки --- */
+.dd-list{background:rgba(20,20,20,.96);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),var(--sh3)}
+.dd-opt{transition:background .15s,color .15s,transform .35s var(--sp)}
+.dd-opt:hover{transform:translateX(3px)}
+
+/* --- мастер первого запуска: стеклянная карточка, мини-гироскоп, шаги --- */
+.ob.first{background:radial-gradient(70% 60% at 50% 42%,rgba(20,20,20,.9),rgba(3,3,3,.98))}
+.ob-card{position:relative;padding:26px 28px 28px;background:linear-gradient(180deg,rgba(255,255,255,.05),transparent 46%),rgba(13,13,13,.92);
+  border-color:var(--line-h);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 40px 90px rgba(0,0,0,.75),0 0 80px rgba(255,255,255,.035)}
+.ob-brand{display:flex;align-items:center;gap:var(--sp4);margin:0 0 var(--sp5);padding-bottom:var(--sp4);border-bottom:1px solid var(--line)}
+.ob-brand b{display:block;font:600 17px/1.1 var(--serif);letter-spacing:.14em}
+.ob-gyro{position:relative;flex:none;width:60px;height:60px;transform-style:preserve-3d}
+.ob-gyro img{position:absolute;left:13px;top:13px;width:34px;height:34px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1px rgba(255,255,255,.3),0 0 18px rgba(255,255,255,.14)}
+.ob-gyro .sp-g.a{inset:3px}.ob-gyro .sp-g.b{inset:8px}.ob-gyro .sp-g.c{inset:-3px}
+.ob-steps{display:flex;gap:6px;margin-top:9px}
+.ob-steps i{width:22px;height:3px;border-radius:2px;background:rgba(255,255,255,.12);transition:background .4s,box-shadow .4s,width .5s var(--sp)}
+.ob-steps i.on{background:#fff;box-shadow:0 0 10px rgba(255,255,255,.6);width:30px}
+.ob:not(.first) .ob-steps i:first-child{display:none}
+.ob-big{position:relative;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.012));box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+  transition:transform .5s var(--sp),border-color .25s,background .25s,box-shadow .3s}
+.ob-big.lit{transform:perspective(700px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(-3px);transition:transform .14s linear,border-color .25s,background .25s,box-shadow .3s;
+  border-color:var(--ink2);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 18px 36px -12px rgba(0,0,0,.8),0 0 26px rgba(255,255,255,.07)}
+.ob-big:active{transform:scale(.97)}
 </style>
 </head>
 <body>
@@ -2443,7 +2566,8 @@ function renderSw() {
       </div>`}
       ${cat.night ? `<div class="sched">${$t("nightOff")} · ${$t("from")} ${cat.nightFrom}</div>` : ""}
       ${cat.items.map((it, ii) => `
-        <div class="row">
+        <div class="row dv">
+          <i class="pw ${it.on ? "on" : ""}"></i>
           <div><b>${esc(devName(it))}</b><small>${$t(it.on ? "swOn" : "swOff")}</small></div>
           <div class="tg ${it.on ? "on" : ""}" data-cat="${ci}" data-item="${ii}" role="switch"></div>
         </div>`).join("")}
@@ -2501,9 +2625,10 @@ function renderDecay() {
         ? d.left + $t("h") + " · " + $t("decayWarn")
         : d.left + $t("h") + " · " + $t("decayBad");
     const cls = d.level === "ok" ? "" : d.level === "warn" ? "warn" : "bad";
-    return `<div class="storage-card">
-      <div class="top"><b>${esc(dn(d.name))}</b><small>${d.left}${$t("h")}</small></div>
-      <small class="${cls}">${label}</small>
+    const off = (100 - Math.max(0, Math.min(1, (+d.left || 0) / 72)) * 100).toFixed(1);   // кольцо: запас относительно трёх суток
+    return `<div class="storage-card dk">
+      <span class="dring ${cls}"><svg viewBox="0 0 36 36"><circle class="b" cx="18" cy="18" r="15.5"/><circle class="f" cx="18" cy="18" r="15.5" pathLength="100" style="stroke-dashoffset:${off}"/></svg><b>${esc(d.left)}</b></span>
+      <div class="dkb"><b>${esc(dn(d.name))}</b><small class="${cls}">${label}</small></div>
     </div>`;
   }).join("");
 }
@@ -2513,7 +2638,7 @@ function renderCams() {
   $("#cardCams").hidden = !cams.length;
   $("#camList").innerHTML = !cams.length ? E("emptyCams") : cams.map(c =>
     `<div class="cam-card">
-      <div class="top"><b>${esc(dn(c.name))}</b><small>${c.live ? $t("camLive") : $t("camOffline")}</small></div>
+      <div class="top"><b>${esc(dn(c.name))}</b><small class="${c.live ? "live" : ""}">${c.live ? $t("camLive") : $t("camOffline")}</small></div>
       ${c.frame ? `<div class="preview"><img src="${esc(c.frame)}" alt=""></div>` : ""}
     </div>`
   ).join("");
@@ -2597,10 +2722,10 @@ function renderMarket(filter = "") {
   $("#mktList").innerHTML = list.length
     ? list.map(v =>
       `<div class="mkt-row">
-        <div><b>${esc(dn(v.item))}</b><br><small>×${v.qty}</small></div>
-        <span class="grid">${v.grid}</span>
+        <div class="mk"><b>${esc(dn(v.item))}</b><span class="qty">×${esc(v.qty)}</span></div>
+        <span class="grid">${esc(v.grid)}</span>
         <span class="price">${esc(fmtPrice(v.price))}</span>
-        <button class="btn" style="margin:0;padding:4px 10px" data-g="${v.grid}">→</button>
+        <button class="btn" data-g="${esc(v.grid)}" aria-label="${esc(v.grid)}">${ic("chev")}</button>
       </div>`
     ).join("")
     : E("emptyShops");
@@ -3486,8 +3611,8 @@ const SRC_T = { steam: "srcSteam", server: "srcServer", both: "srcBoth" };
 const srcBadge = o => o.src && SRC_T[o.src] ? `<span class="src ${o.src}" title="${esc($t("srcTip"))}">${$t(SRC_T[o.src])}</span>` : "";
 
 const trRow = (o, rm) =>
-  `<div class="tr ${o.on ? "on" : ""}${rm == null ? "" : " clk"}" data-rm="${rm == null ? "" : rm}"${rm == null ? "" : ` data-open="${rm}"`}>
-    <i class="dot"></i>
+  `<div class="tr ${o.on ? "on" : ""}${rm == null ? "" : " clk"}" data-rm="${rm == null ? "" : rm}"${rm == null ? "" : ` data-open="${rm}"`} style="--ph:-${Date.now() % 2400}ms">
+    <i class="tav">${esc((String(tgLabel(o) || "?").trim().charAt(0) || "?").toUpperCase())}</i>
     <div class="mi">
       <b>${esc(tgLabel(o))}</b>
       <small>${o.pend ? $t("trkPend") : o.nd ? $t("trkNoData") : o.on ? esc(o.srv) : $t("trkOff")}</small>
@@ -4488,7 +4613,9 @@ function packWizard(first) {
   root.id = "ob"; root.className = "ob" + (first ? " first" : "");
   root.setAttribute("role", "dialog"); root.setAttribute("aria-modal", "true"); root.setAttribute("aria-labelledby", "obTitle");
   root.innerHTML =
-    '<div class="ob-card">' +
+    '<div class="ob-card"><div class="ob-brand"><div class="ob-gyro"><i class="sp-g c"></i><i class="sp-g a"></i><i class="sp-g b"></i>' +
+      (document.querySelector(".logo-img") ? '<img alt="" src="' + document.querySelector(".logo-img").src + '">' : "") +
+      '</div><div><b>hollow++</b><span class="ob-steps"><i></i><i></i><i></i></span></div></div>' +
     '<section data-s="lang" hidden><h2 id="obTitle" data-ot="obLang"></h2>' +
       '<div class="ob-row"><button type="button" class="ob-big" data-l="ru"><b>Русский</b></button><button type="button" class="ob-big" data-l="en"><b>English</b></button></div></section>' +
     '<section data-s="role" hidden><h2 data-ot="' + (first ? "obRoleQ" : "obAddH") + '"></h2>' + (first ? "" : '<p data-ot="obAddHint"></p>') +
@@ -4511,6 +4638,7 @@ function packWizard(first) {
   const show = s => {
     root.dataset.dir = ORD[s] < (root._o || 0) ? "b" : "f"; root._o = ORD[s];
     root.querySelectorAll("section").forEach(x => { x.hidden = x.dataset.s !== s; });
+    root.querySelectorAll(".ob-steps i").forEach((d, i) => d.classList.toggle("on", i <= ORD[s]));
     const sec = root.querySelector('section[data-s="' + s + '"]');
     const f = sec && sec.querySelector("input, button"); if (f) f.focus();
   };
@@ -4650,8 +4778,8 @@ fixSw();
   requestAnimationFrame(() => { bg.classList.add("on"); bgKick(); });
 
   /* ---- свет за курсором и наклон мелких карточек ---- */
-  const SEL = ".panel,.card,.storage-card,.cam-card,.alarm-card,.pf-panel,.pf-tile,.tk-key,.stats>div";
-  const TILT = ".storage-card,.cam-card,.alarm-card,.pf-tile,.stats>div,.tk-key";
+  const SEL = ".panel,.card,.storage-card,.cam-card,.alarm-card,.pf-panel,.pf-tile,.tk-key,.stats>div,.fold.sec,.ob-card,.ob-big";
+  const TILT = ".storage-card,.cam-card,.alarm-card,.pf-tile,.stats>div,.tk-key,.ob-big";
   let lit = [], pend = null, litRaf = 0;
   const unlight = el => { el.classList.remove("lit"); el.style.removeProperty("--rx"); el.style.removeProperty("--ry"); };
   function light() {
