@@ -100,7 +100,8 @@ pub fn team_form(
                 (Value::Null, Value::Null)
             };
             json!({
-                "n": m.name, "u": u, "v": v,
+                // id строкой: u64 SteamID в JS-числе теряет младшие разряды
+                "n": m.name, "id": m.steam_id.to_string(), "u": u, "v": v,
                 "alive": m.is_alive, "online": m.is_online,
                 "srv": "", "since": since,
             })
@@ -343,6 +344,7 @@ mod tests {
         assert_eq!(a[0]["u"], 0.5);
         assert!(a[1]["u"].is_null());
         assert_eq!(a[0]["since"], 1000);
+        assert!(a[0]["id"].is_string());
         let v2 = team_form(&info, 4000.0, &mut pres, 5000);
         assert_eq!(v2[0]["since"], 1000); // состояние не менялось
     }

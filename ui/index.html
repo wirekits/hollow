@@ -1850,7 +1850,7 @@ const L = {
     riskLow: "Обычный", riskMid: "Подозрительный", riskHi: "Опасный",
     kdr: "K/D", acc: "Точность", hours: "Наиграно", lvl: "Уровень",
     save: "Сохранить",
-    grpTeam: "Наша пачка", auto: "авто", grpTargets: "На прицеле",
+    grpTeam: "Наша пачка", auto: "авто", grpTargets: "На прицеле", tmStats: "Открыть стату",
     addTarget: "Добавить цель", tgPh: "SteamID64, ссылка на профиль или vanity", tgAl: "SteamID64, ссылка на профиль или vanity цели",
     add: "Добавить", searchPh: "фильтр по нику…",
     
@@ -1921,7 +1921,7 @@ const L = {
     riskLow: "Low risk", riskMid: "Medium risk", riskHi: "High risk",
     kdr: "KDR", acc: "Accuracy", hours: "Hours", lvl: "Level",
     save: "Save",
-    grpTeam: "My team", auto: "auto", grpTargets: "Targets",
+    grpTeam: "My team", auto: "auto", grpTargets: "Targets", tmStats: "Open stats",
     addTarget: "Add target", tgPh: "SteamID64, profile link or vanity", tgAl: "Target SteamID64, profile link or vanity",
     add: "Add", searchPh: "Filter by name…",
     
@@ -3628,8 +3628,14 @@ const trRow = (o, rm) =>
 
 function renderTrk(filter = "") {
   const f = filter.toLowerCase();
-  const t = team.map(m => ({ n: m.n, on: m.online !== false, srv: m.srv || server.name, since: m.since || Date.now() }));
+  const t = team.map(m => ({ n: m.n, id: isSteamId(String(m.id || "")) ? String(m.id) : "", on: m.online !== false, srv: m.srv || server.name, since: m.since || Date.now() }));
   $("#g1").innerHTML = t.length ? t.map(o => trRow(o)).join("") : E("emptyTeam");
+  [...$("#g1").querySelectorAll(".tr")].forEach((r, i) => {   // тимейт со SteamID: клик открывает его стату
+    const id = t[i] && t[i].id;
+    if (!id) return;
+    r.classList.add("clk"); r.title = $t("tmStats");
+    r.onclick = () => openProfile(id);
+  });
   $("#g1n").textContent = t.length ? t.filter(o => o.on).length + "/" + t.length + " " + $t("online") : "";
 
   const filtered = targets.filter(o => !f || o.n.toLowerCase().includes(f) || tgLabel(o).toLowerCase().includes(f) || ((o.note || "") + " " + dn(o.note || "")).toLowerCase().includes(f));
