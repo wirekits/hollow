@@ -890,15 +890,15 @@ html.no-motion .msg.fresh::before,html.no-motion .fresh-hl::before{display:none}
 @keyframes pfScale{from{transform:scale(0);opacity:0}}
 .pf-type{margin-top:var(--sp2);text-align:center;font:var(--fs-3) var(--sans);color:var(--mute)}
 .pf-type b{color:var(--ink);font-weight:600;border:1px solid var(--line-h);border-radius:var(--r-p);padding:3px 12px;margin-left:4px}
-.pf-body{display:flex;gap:var(--sp3);align-items:center;flex:1}
-.pf-sil{flex:none;width:46%;max-width:170px;display:block;overflow:visible}
+.pf-body{display:flex;flex-wrap:wrap;gap:var(--sp3);align-items:center;justify-content:center;flex:1}
+.pf-sil{flex:none;width:46%;min-width:120px;max-width:170px;display:block;overflow:visible}
 .sil-b{fill:rgba(255,255,255,.04);stroke:var(--line-h);stroke-width:1.3}
 .sil-f{stroke:none;fill:#fff;animation:pfFill .9s ease .35s backwards}
 @keyframes pfFill{from{fill-opacity:0}}
 .sil-d{fill:#fff;animation:pfDot .5s ease backwards}
 .sil-d.off{fill-opacity:.14}
 @keyframes pfDot{from{opacity:0;transform:scale(0)}}
-.pf-leg{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--sp3)}
+.pf-leg{flex:1 1 150px;min-width:0;display:flex;flex-direction:column;gap:var(--sp3)}
 .pf-leg div{display:grid;grid-template-columns:auto 1fr auto;gap:2px var(--sp2);align-items:center;font:var(--fs-3) var(--sans)}
 .pf-leg .mk{width:11px;height:11px;border-radius:50%;background:var(--ink);grid-row:1}
 .pf-leg .mk.bd{border-radius:3px;background:var(--ink2)}
@@ -2468,7 +2468,7 @@ Object.assign(L.ru, {
   pfFine: "Steam не делит попадания по частям тела: показаны голова / тело / мимо.",
   pfKdrLbl: "K/D", pfAccLbl: "Точность", pfScale: "Шкала K/D: 0 … 3+",
   ax_aim: "Aim", ax_pvp: "PvP", ax_pve: "PvE", ax_gathering: "Gathering", ax_building: "Building", ax_survival: "Survival",
-  pt_pvp_roamer: "PvP-скиталец", pt_pve_hunter: "PvE-охотник", pt_farmer: "Фармер", pt_builder: "Строитель", pt_survivor: "Выживальщик", pt_balanced: "Универсал", pt_unknown: "не определён",
+  pt_pvp_roamer: "Комбатер", pt_pve_hunter: "PvE-охотник", pt_farmer: "Фармер", pt_builder: "Строитель", pt_survivor: "Выживальщик", pt_balanced: "Универсал", pt_unknown: "не определён",
   pfPeak: "Пик: {d} {h}", pfUtc: "время в UTC", pfLess: "меньше", pfMore: "больше", pfMin: "{n} мин",
   pfActStat: "Дней с данными: {d} · сессий: {s} · всего часов: {h}", pfSince: "история копится с {d}",
   pfActNone: "Истории активности пока нет: она копится с момента, когда игрок добавлен в слежение.",
@@ -2493,7 +2493,7 @@ Object.assign(L.en, {
   pfFine: "Steam does not split hits by body part: head / body / missed are shown.",
   pfKdrLbl: "K/D", pfAccLbl: "Accuracy", pfScale: "K/D scale: 0 … 3+",
   ax_aim: "Aim", ax_pvp: "PvP", ax_pve: "PvE", ax_gathering: "Gathering", ax_building: "Building", ax_survival: "Survival",
-  pt_pvp_roamer: "PvP roamer", pt_pve_hunter: "PvE hunter", pt_farmer: "Farmer", pt_builder: "Builder", pt_survivor: "Survivor", pt_balanced: "Balanced", pt_unknown: "undetermined",
+  pt_pvp_roamer: "Combatant", pt_pve_hunter: "PvE hunter", pt_farmer: "Farmer", pt_builder: "Builder", pt_survivor: "Survivor", pt_balanced: "Balanced", pt_unknown: "undetermined",
   pfPeak: "Peak: {d} {h}", pfUtc: "times in UTC", pfLess: "less", pfMore: "more", pfMin: "{n} min",
   pfActStat: "Days with data: {d} · sessions: {s} · total hours: {h}", pfSince: "history builds up since {d}",
   pfActNone: "No activity history yet: it builds up from the moment the player is added to tracking.",
@@ -2568,10 +2568,10 @@ function pfBody(b) {
     const left = i % 2 === 0, x = left ? 6 + rnd() * 34 : 160 + rnd() * 34, y = 12 + rnd() * 256, on = i < lit;
     dots += `<circle class="sil-d${on ? "" : " off"}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(1.6 + rnd() * 1.6).toFixed(1)}"${on ? ` style="animation-delay:${(0.4 + i * 0.03).toFixed(2)}s;transform-origin:${x.toFixed(1)}px ${y.toFixed(1)}px"` : ""}/>`;
   }
-  const torso = '<path d="M76 66h48q10 0 10 10v66q0 8-8 8H74q-8 0-8-8V76q0-10 10-10Z"/><rect x="46" y="72" width="16" height="84" rx="8"/><rect x="138" y="72" width="16" height="84" rx="8"/><rect x="72" y="152" width="25" height="104" rx="10"/><rect x="103" y="152" width="25" height="104" rx="10"/>';
+  const torso = '<path d="M70 68Q70 62 78 62H122Q130 62 130 68L128 124Q127 148 122 156H78Q73 148 72 124Z"/><path d="M63 70Q53 72 51 86L45 140Q44 150 50 152Q57 153 58 144L68 96Z" /><path d="M137 70Q147 72 149 86L155 140Q156 150 150 152Q143 153 142 144L132 96Z"/><path d="M76 158H99L97 232Q97 238 96 252Q96 262 84 262Q72 262 76 252L76 232Z"/><path d="M101 158H124L122 232Q122 244 123 252Q124 262 114 262Q103 262 103 252Q104 244 103 232Z"/><rect x="93" y="54" width="14" height="12" rx="4"/>';
   const svg = `<svg class="pf-sil" viewBox="0 0 200 280" role="img" aria-label="${esc($t("pfBody"))}">
-    <g class="sil-b"><circle cx="100" cy="38" r="19"/>${torso}</g>
-    <circle class="sil-f" cx="100" cy="38" r="19" style="fill-opacity:${op(head)}"/>
+    <g class="sil-b"><ellipse cx="100" cy="34" rx="17" ry="20"/>${torso}</g>
+    <ellipse class="sil-f" cx="100" cy="34" rx="17" ry="20" style="fill-opacity:${op(head)}"/>
     <g class="sil-f" style="fill-opacity:${op(body)}">${torso}</g>${dots}</svg>`;
   const row = (cls, k, v) => `<div><i class="mk ${cls}"></i><span>${$t(k)}</span><b>${fnum(v, 1)}%</b><span class="bar"><i style="--w:${v}%"></i></span></div>`;
   const shots = fnum(b.fired), hits = fnum(b.hit);
