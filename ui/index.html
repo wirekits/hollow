@@ -1567,6 +1567,22 @@ html.no-motion #bgfx{display:none}
                 <small class="err" id="stErr" role="alert"></small>
               </div></div>
             </div>
+            <div class="fold" id="fWatch">
+              <button type="button" class="fold-h" aria-expanded="false"><span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span><span data-t="wTitle">Аккаунт-наблюдатель</span><small id="wHd"></small></button>
+              <div class="fold-b"><div>
+                <p class="pair-hint" data-t="wHint" style="margin-top:var(--sp2)"></p>
+                <div class="pair-status"><span class="led" id="wLed"></span><span id="wSt" aria-live="polite"></span></div>
+                <div id="wForm">
+                  <div class="addbox"><input id="wAcc" data-ph="wAccPh" data-al="wAccPh" autocomplete="off" spellcheck="false"></div>
+                  <div class="addbox"><input id="wPass" type="password" data-ph="wPassPh" data-al="wPassPh" autocomplete="new-password">
+                    <button type="button" class="btn pri" id="wLogin" data-t="wLogin">Войти</button></div>
+                </div>
+                <div class="addbox" id="wCodeBox" hidden><input id="wCode" data-ph="wCodePh" data-al="wCodePh" maxlength="8" autocomplete="one-time-code" spellcheck="false">
+                  <button type="button" class="btn pri" id="wCodeBtn" data-t="wSend">Отправить</button></div>
+                <button type="button" class="btn" id="wOut" data-t="wLogout" hidden>Выйти</button>
+                <small class="err" id="wErr" role="alert"></small>
+              </div></div>
+            </div>
 
             <small class="err" id="pErr" role="alert"></small>
             <div class="cfg-sub" data-t="setPair">Rust+</div>
@@ -2952,6 +2968,7 @@ function pfBuild(p) {
         <button type="button" class="btn" id="pfCopy"><svg class="ic"><use href="#i-box"/></svg><span>${$t("pfCopy")}</span></button>` : ""}
         ${al.length ? `<button type="button" class="btn" id="pfAlBtn" aria-expanded="false"><svg class="ic"><use href="#i-hist"/></svg><span>${$t("pfAliases")} · ${al.length}</span></button>` : ""}
         <button type="button" class="btn pri" id="pfWatch"${tracked ? " disabled" : ""}><svg class="ic"><use href="#i-target"/></svg><span>${$t(tracked ? "pfWatching" : "pfWatch")}</span></button>
+        ${sid && p.watcher && p.watcher !== "off" ? `<button type="button" class="btn" id="pfFriend"${p.watcher === "none" ? "" : " disabled"} title="${esc($t("wFriendTip"))}"><svg class="ic"><use href="#i-users"/></svg><span>${$t(p.watcher === "friend" ? "wIsFriend" : p.watcher === "pending" ? "wPending" : "wAddFriend")}</span></button>` : ""}
       </div>${notes}</div>
     ${risk}
     ${al.length ? `<div class="fold pf-al-f" id="pfAlF"><div class="fold-b"><div><div class="pf-al">${al.map(a => `<div><span>${esc(a.name)}</span><small>${pfHas(a.lastSeen) ? esc(new Date(+a.lastSeen).toLocaleDateString(pfLoc())) : ""}</small></div>`).join("")}</div></div></div></div>` : ""}`;
@@ -3031,6 +3048,11 @@ function profRender() {
     const er = addTargetValue(p.steamId || p.name || profQ);
     if (er && er !== "errTgDup") { toast($t(er), "err"); return; }
     w.disabled = true; w.querySelector("span").textContent = $t("pfWatching");
+  };
+  const fr = q("pfFriend");
+  if (fr) fr.onclick = async () => {
+    try { await inv("watcher_add_friend", { steamId: String(p.steamId) }); p.watcher = "pending"; fr.disabled = true; fr.querySelector("span").textContent = $t("wPending"); toast($t("wSent"), "ok"); }
+    catch (e) { toast(String(e), "err"); }
   };
 }
 function showProf() {
@@ -4191,7 +4213,13 @@ Object.assign(L.ru, {
   autoGroups: "Группы устройств", grpAdd: "Добавить группу", grpNone: "Групп пока нет", grpNamePh: "Название группы", grpIdsPh: "id устройств через запятую",
   grpDel: "Удалить группу", grpTitle: "Группы устройств", known: "Известные устройства",
   errTime: "Укажите время «с» и «до»", errGrpName: "У каждой группы нужно название", errGrpIds: "id устройств: только цифры",
-  hs: "Хедшоты", kills: "Убийства", deaths: "Смерти", created: "Аккаунт"
+  hs: "Хедшоты", kills: "Убийства", deaths: "Смерти", created: "Аккаунт",
+  wTitle: "Аккаунт-наблюдатель", wHint: "Отдельный Steam-аккаунт, в друзья к которому добавлены цели. Другу Steam показывает игру и сервер, даже если игровые данные скрыты «для друзей». Заведи пустой аккаунт, не основной. Пароль не сохраняется, хранится только токен входа.",
+  wAccPh: "Логин Steam", wPassPh: "Пароль", wLogin: "Войти", wCodePh: "Код Steam Guard", wSend: "Отправить", wLogout: "Выйти",
+  wOff: "не подключён", wConn: "подключение…", wGuardEmail: "Steam прислал код на почту аккаунта: введи его", wGuardDevice: "введи код из мобильного Steam Guard или подтверди вход в приложении",
+  wOnline: "{a} · друзей {f} · в Rust {r}", wConfirm: "если Steam просит подтверждение — подтверди вход в мобильном приложении",
+  wAddFriend: "В друзья наблюдателю", wPending: "Заявка отправлена", wIsFriend: "Друг наблюдателя", wSent: "Заявка в друзья отправлена: цель должна принять",
+  wFriendTip: "Когда цель примет заявку, её игра и сервер будут видны даже при скрытых игровых данных (режим «для друзей»)", errWLogin: "Введи логин и пароль"
 });
 Object.assign(L.en, {
   setNotify: "Notifications", notifyHint: "Where alerts go: Discord, Telegram, team chat, the panel. Secrets are never shown after saving.",
@@ -4204,8 +4232,60 @@ Object.assign(L.en, {
   autoGroups: "Device groups", grpAdd: "Add group", grpNone: "No groups yet", grpNamePh: "Group name", grpIdsPh: "device ids, comma separated",
   grpDel: "Delete group", grpTitle: "Device groups", known: "Known devices",
   errTime: "Set both the from and to time", errGrpName: "Every group needs a name", errGrpIds: "Device ids: digits only",
-  hs: "Headshots", kills: "Kills", deaths: "Deaths", created: "Account"
+  hs: "Headshots", kills: "Kills", deaths: "Deaths", created: "Account",
+  wTitle: "Watcher account", wHint: "A separate Steam account with your targets as friends. Steam shows friends the game and server even when game details are friends-only. Use an empty account, not your main. The password is not stored, only a login token.",
+  wAccPh: "Steam login", wPassPh: "Password", wLogin: "Log in", wCodePh: "Steam Guard code", wSend: "Send", wLogout: "Log out",
+  wOff: "not connected", wConn: "connecting…", wGuardEmail: "Steam emailed a code to the account: enter it", wGuardDevice: "enter the mobile Steam Guard code or approve the login in the app",
+  wOnline: "{a} · friends {f} · in Rust {r}", wConfirm: "if Steam asks for confirmation, approve the login in the mobile app",
+  wAddFriend: "Add to watcher friends", wPending: "Request sent", wIsFriend: "Watcher friend", wSent: "Friend request sent: the target has to accept",
+  wFriendTip: "Once the target accepts, their game and server are visible even with friends-only game details", errWLogin: "Enter login and password"
 });
+/* аккаунт-наблюдатель: состояние приходит событием watcher_status */
+let WST = { state: "off", account: "", msg: "", guard: "", friends: 0, inRust: 0 };
+function renderWatcher() {
+  const st = $("#wSt"); if (!st) return;
+  const s = WST.state, on = s === "online";
+  const txt = s === "online" ? $t("wOnline").replace("{a}", WST.account).replace("{f}", WST.friends).replace("{r}", WST.inRust)
+    : s === "guard" ? $t(WST.guard === "email" ? "wGuardEmail" : "wGuardDevice")
+    : s === "connecting" ? $t("wConn") + (WST.account ? " " + WST.account : "") + (WST.msg ? " · " + WST.msg : "")
+    : s === "error" ? WST.msg : $t("wOff");
+  st.textContent = txt;
+  $("#wLed").className = "led" + (on ? " on" : s === "error" ? " err" : s === "connecting" || s === "guard" ? " connecting" : "");
+  $("#wHd").textContent = on ? "· " + WST.account : "";
+  $("#wCodeBox").hidden = s !== "guard";
+  $("#wForm").hidden = on || s === "guard" || (s === "connecting" && !!WST.account);
+  $("#wOut").hidden = !(on || (s === "connecting" && WST.account) || (s === "error" && WST.account));
+  if (s === "guard") setTimeout(() => { const c = $("#wCode"); if (c) c.focus(); }, 50);
+}
+async function watcherLogin() {
+  const er = $("#wErr"); er.textContent = "";
+  const account = $("#wAcc").value.trim(), password = $("#wPass").value;
+  if (!account || !password) { er.textContent = $t("errWLogin"); return; }
+  $("#wLogin").disabled = true;
+  er.textContent = $t("wConfirm");
+  try { await inv("watcher_login", { account, password }); $("#wPass").value = ""; er.textContent = ""; }
+  catch (e) { er.textContent = String(e); }
+  finally { $("#wLogin").disabled = false; }
+}
+async function watcherCode() {
+  const er = $("#wErr"), code = $("#wCode").value.trim();
+  if (!code) return;
+  try { await inv("watcher_code", { code }); $("#wCode").value = ""; er.textContent = $t("wConn"); }
+  catch (e) { er.textContent = String(e); }
+}
+(function initWatcher() {
+  const b = $("#wLogin"); if (!b) return;
+  b.onclick = watcherLogin;
+  $("#wPass").onkeydown = e => { if (e.key === "Enter") watcherLogin(); };
+  $("#wCodeBtn").onclick = watcherCode;
+  $("#wCode").onkeydown = e => { if (e.key === "Enter") watcherCode(); };
+  $("#wOut").onclick = async () => { try { await inv("watcher_logout"); } catch (e) {} WST = { state: "off", account: "", msg: "", guard: "", friends: 0, inRust: 0 }; renderWatcher(); };
+  renderWatcher();
+  if (IS_TAURI) {
+    try { window.__TAURI__.event.listen("watcher_status", ev => { WST = Object.assign(WST, ev.payload || {}); renderWatcher(); }); } catch (e) {}
+    inv("watcher_status").catch(() => {});
+  }
+})();
 const AUTO = { night_off: false, night_from: "22:00", night_to: "07:00", night_groups: [], groups: [] };
 const CFG = { hasHook: false, hasTg: false, hasSteam: false, tgChat: "", minPrio: "low", saved: [], dirty: false };
 

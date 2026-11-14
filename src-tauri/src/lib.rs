@@ -9,11 +9,14 @@ mod rustplus;
 mod shell;
 mod steam;
 mod types;
+mod watcher;
 
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // в дереве два бэкенда rustls (ring у нас, aws-lc у steam-vent): без явного выбора rustls паникует
+    let _ = rustls::crypto::ring::default_provider().install_default();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| shell::raise_main(app)))
         .plugin(tauri_plugin_notification::init())
@@ -37,6 +40,7 @@ pub fn run() {
                 }
                 automation::start(&handle).await;
                 pairing::resume(&handle).await;
+                watcher::start(&handle);
             });
             Ok(())
         })
@@ -61,6 +65,11 @@ pub fn run() {
             pairing::pair_cancel,
             shell::app_settings_get,
             shell::app_settings_set,
+            watcher::watcher_login,
+            watcher::watcher_code,
+            watcher::watcher_logout,
+            watcher::watcher_status,
+            watcher::watcher_add_friend,
         ])
         .run(tauri::generate_context!())
         .expect("error while running hollow++");

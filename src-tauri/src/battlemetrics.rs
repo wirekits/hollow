@@ -180,20 +180,34 @@ pub async fn lookup_player(app: AppHandle, query: String) -> Result<(), String> 
             g.server_name.clone(),
         )
     };
-    let mut srv = label_server(&presence.srv, pack.as_ref().map(|(i, p)| (i.as_str(), *p)), server_name.as_deref());
+    let pk = pack.as_ref().map(|(i, p)| (i.as_str(), *p));
+    let mut srv = label_server(&presence.srv, pk, server_name.as_deref());
     // тимейт: Rust+ знает онлайн точно, даже при закрытых игровых данных в Steam
     let team_on = crate::rustplus::team_online(&id) == Some(true);
-    if team_on && srv.is_empty() {
-        srv = server_name.clone().unwrap_or_default(); // пусто — во фронт уйдёт «Rust»
-    }
-    let mut online = presence.in_rust || src.is_some() || team_on;
-    if !online && presence.steam_on {
+    let friend = crate::watcher::presence(&id);
+    let mut online;
+    if team_on {
         online = true;
-        srv = STEAM_ONLY.to_string();
+        if srv.is_empty() {
+            srv = server_name.clone().unwrap_or_default(); // пусто — во фронт уйдёт «Rust»
+        }
+    } else if let Some(f) = &friend {
+        // друг аккаунта-наблюдателя: Steam показывает другу игру и сервер — точнее остальных каналов
+        online = f.in_rust;
+        if f.in_rust {
+            let probe = app.state::<BmState>().inner.lock().unwrap().probe.clone();
+            srv = watcher_label(f, pk, server_name.as_deref(), &probe);
+        }
+    } else {
+        online = presence.in_rust || src.is_some();
+        if !online && presence.steam_on {
+            online = true;
+            srv = STEAM_ONLY.to_string();
+        }
     }
-    // Steam молчит («Невидимка» в Steam) (закрытые игровые данные) — разово ищем ник в списке игроков серверов пачки (A2S)
+    // Steam молчит («Невидимка» в Steam) — разово ищем ник в списке игроков серверов пачки (A2S)
     let mut a2s_since = None;
-    if !online {
+    if !online && friend.is_none() {
         let (servers, _) = collect_servers(&app, server_name.as_deref(), &[]).await;
         if !servers.is_empty() {
             let (ok, _) = query_all(&servers).await;
@@ -221,6 +235,8 @@ pub async fn lookup_player(app: AppHandle, query: String) -> Result<(), String> 
             json!([])
         };
         o.insert("servers".into(), servers);
+        // наблюдатель: friend | pending | none | off — фронт показывает кнопку «в друзья наблюдателю»
+        o.insert("watcher".into(), json!(crate::watcher::relation(&id)));
         o.insert("tracked".into(), json!(rec.is_some()));
         o.insert("trackedSince".into(), json!(rec.as_ref().map(|t| t.tracked_since)));
         o.insert("trackSrc".into(), json!(src));
@@ -716,9 +732,15 @@ async fn poll_once(app: &AppHandle) -> Result<(), PollErr> {
                 }
             }
             let team_on = t.steam_id.as_deref().and_then(crate::rustplus::team_online);
-            let steam_obs = match team_on {
+            let friend = t.steam_id.as_deref().and_then(crate::watcher::presence);
+            let steam_obs = match (team_on, &friend) {
                 // тимейт: Rust+ знает точно, это важнее Steam
-                Some(true) => Some((true, server_name.clone().unwrap_or_else(|| "Rust".into()))),
+                (Some(true), _) => Some((true, server_name.clone().unwrap_or_else(|| "Rust".into()))),
+                // друг наблюдателя: Steam показывает другу игру и сервер
+                (_, Some(f)) => Some((
+                    f.in_rust,
+                    if f.in_rust { watcher_label(f, pack.as_ref().map(|(i, p)| (i.as_str(), *p)), server_name.as_deref(), &g.probe) } else { String::new() },
+                )),
                 _ => pr.as_ref().map(|p| {
                     let srv = label_server(&p.srv, pack.as_ref().map(|(i, p)| (i.as_str(), *p)), server_name.as_deref());
                     steam_seen(p, srv)
@@ -955,6 +977,29 @@ fn steam_seen(p: &Presence, rust_srv: String) -> (bool, String) {
     } else {
         (false, String::new())
     }
+}
+
+/// ip сервера пачки, найденного по имени в master list (кэш `cached_resolve`, ключ "name:<имя>").
+fn pack_ip_by_name(probe: &HashMap<String, (Option<SocketAddr>, i64)>, name: &str) -> Option<String> {
+    probe.get(&format!("name:{name}")).and_then(|(a, _)| a.map(|a| a.ip().to_string()))
+}
+
+/// Подпись сервера друга наблюдателя: имя сервера пачки, если ip совпал, иначе ip:port или rich presence.
+fn watcher_label(
+    f: &crate::watcher::FriendSeen,
+    pack: Option<(&str, u16)>,
+    name: Option<&str>,
+    probe: &HashMap<String, (Option<SocketAddr>, i64)>,
+) -> String {
+    if !f.server.is_empty() {
+        if let (Some(n), Some((ip, _))) = (name, f.server.rsplit_once(':')) {
+            if pack.map(|(pip, _)| pip == ip).unwrap_or(false) || pack_ip_by_name(probe, n).as_deref() == Some(ip) {
+                return n.to_string();
+            }
+        }
+        return f.server.clone();
+    }
+    f.status.clone()
 }
 
 /// Из объекта игрока GetPlayerSummaries. «В Rust» = gameid == "252490".
