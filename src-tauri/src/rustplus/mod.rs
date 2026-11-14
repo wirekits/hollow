@@ -730,3 +730,48 @@ mod relay_tests {
         assert!(relay_reason("io error").starts_with("не удалось подключиться через ретранслятор"));
     }
 }
+#[cfg(test)]
+mod live_probe {
+    use super::*;
+
+    /// Разовая живая проверка маркеров: HOLLOW_PROBE=1 cargo test --lib live_markers -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn live_markers() {
+        if std::env::var("HOLLOW_PROBE").is_err() { return; }
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let dir = std::path::PathBuf::from(std::env::var("APPDATA").unwrap()).join("com.hollow.panel");
+        let p: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("profiles.json")).unwrap()).unwrap();
+        let act = p["active"].as_str().unwrap_or("");
+        let prof = p["profiles"].as_array().unwrap().iter().find(|x| x["id"].as_str() == Some(act)).unwrap();
+        let s = &prof["server"];
+        let pair: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("pairing.json")).unwrap()).unwrap();
+        let auth = pair["auth_token"].as_str().unwrap().trim().to_string();
+        let req = relay_request(s["relay_id"].as_str().unwrap().trim(), &auth).unwrap();
+        let (mut ws, _) = tokio_tungstenite::connect_async(req).await.unwrap();
+        let pid: u64 = s["player_id"].as_str().unwrap().parse().unwrap();
+        let tok: i32 = s["player_token"].as_str().unwrap().parse().unwrap();
+        for (seq, info) in [(1u32, true), (2, false)] {
+            let mut r = AppRequest { seq, player_id: pid, player_token: tok, ..Default::default() };
+            if info { r.get_info = Some(AppEmpty {}); } else { r.get_map_markers = Some(AppEmpty {}); }
+            ws.send(WsMessage::Binary(r.encode_to_vec().into())).await.unwrap();
+        }
+        let mut got = 0;
+        while got < 2 {
+            let Some(Ok(WsMessage::Binary(b))) = tokio::time::timeout(Duration::from_secs(15), ws.next()).await.unwrap() else { continue };
+            let m = AppMessage::decode(&b[..]).unwrap();
+            let Some(r) = m.response else { continue };
+            got += 1;
+            if let Some(e) = r.error { println!("error: {}", e.error); }
+            if let Some(i) = r.info { println!("map_size={}", i.map_size); }
+            if let Some(mm) = r.map_markers {
+                let mut h = std::collections::BTreeMap::new();
+                for x in &mm.markers { *h.entry(x.r#type).or_insert(0) += 1; }
+                println!("marker types: {h:?}");
+                for x in mm.markers.iter().filter(|x| x.r#type != 3 && x.r#type != 1) {
+                    println!("  type={} x={:.0} y={:.0} name={:?} radius={}", x.r#type, x.x, x.y, x.name, x.radius);
+                }
+            }
+        }
+    }
+}

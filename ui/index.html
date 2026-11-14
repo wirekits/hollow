@@ -1312,13 +1312,9 @@ html.no-motion #bgfx{display:none}
     <!-- MAP -->
     <section class="view on" id="v-map">
       <div class="col l">
-        <div class="panel">
+        <div class="panel grow">
           <div class="sec-t"><svg class="ic"><use href="#i-users"/></svg><span data-t="team">Команда</span> <span class="n" id="cnt"></span></div>
           <div class="list" id="team"></div>
-        </div>
-        <div class="panel grow">
-          <div class="sec-t"><svg class="ic"><use href="#i-clock"/></svg><span data-t="events">События</span></div>
-          <div class="list" id="evs"></div>
         </div>
       </div>
 
@@ -1401,28 +1397,6 @@ html.no-motion #bgfx{display:none}
               <div id="farmBoxes"></div>
             </div>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- MARKET -->
-    <section class="view" id="v-mkt">
-      <div class="page">
-        <div class="page-h">
-          <div class="pi"><svg class="ic"><use href="#i-cart"/></svg></div>
-          <div><h2 data-t="mktH">Магазы</h2><p data-t="mktP"></p></div>
-        </div>
-        <div class="card">
-          <div class="search-row"><svg class="ic"><use href="#i-search"/></svg><input id="mktSearch" data-ph="mktPh" placeholder="Поиск предмета…"></div>
-          <div class="mkt-tabs">
-            <button class="on" data-mkt="sell" data-t="mktSell">Продают</button>
-            <button data-mkt="buy" data-t="mktBuy">Скупают</button>
-          </div>
-          <div id="mktList"></div>
-        </div>
-        <div class="card">
-          <div class="card-h"><svg class="ic"><use href="#i-pin"/></svg><span data-t="mktMerchant">Торговец</span><span class="n" id="merchantGrid">—</span></div>
-          <div id="merchantCard"></div>
         </div>
       </div>
     </section>
@@ -1649,9 +1623,6 @@ html.no-motion #bgfx{display:none}
               </div>
             </div>
             <div class="row" style="margin-top:var(--sp3)"><div><b data-t="alrtMin">Минимальная важность</b></div><div class="seg" id="nPrio"></div></div>
-            <div class="cfg-sub" data-t="shopWatchT">Алерт по магазинам</div>
-            <p class="pair-hint" data-t="shopWatchHint"></p>
-            <div class="addbox"><input id="nShop" data-ph="shopWatchPh" data-al="shopWatchPh" autocomplete="off" spellcheck="false" maxlength="400"></div>
             <small class="err" id="nErr" role="alert"></small>
             <div class="pack-row">
               <button type="button" class="btn pri" id="nSave" data-t="pSave">Сохранить</button>
@@ -2356,6 +2327,7 @@ const frac = x =>Math.max(0, Math.min(1, +x || 0)).toFixed(3);
 function renderEv() {
   /* кольцо вокруг значка — оставшееся время; urgent бьётся в такт секундам (фаза от часов, не сбивается перерисовкой) */
   const host = $("#evs"), old = {}, ph = -(Date.now() % 1000);
+  if (!host) return;
   host.querySelectorAll(".rg .f").forEach(c => { old[c.dataset.k] = c.style.strokeDashoffset; });
   host.innerHTML = evs.length ? evs.map((e, idx) => {
     const urgent = e[2] < 180 && e[2] > 0;
@@ -3098,7 +3070,6 @@ renderFarm();
 const items = [
   ["map", "Карта", "map"],
   ["dev", "Хата", "home"],
-  ["mkt", "Магазы", "cart"],
   ["trk", "Трекер", "target"],
   ["alrt", "Алерт", "bell"],
   ["set", "Настройки", "sliders"]
@@ -3213,8 +3184,8 @@ document.addEventListener("keydown", e => {
     if (e.key === "Escape") e.target.blur();
     return;
   }
-  if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key >= "1" && e.key <= "6") {
-    const map = ["map", "dev", "mkt", "trk", "alrt", "set"];
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key >= "1" && e.key <= "5") {
+    const map = ["map", "dev", "trk", "alrt", "set"];
     switchTab(map[+e.key - 1]);
   }
 });
@@ -4489,7 +4460,7 @@ async function saveNotify(silent) {
     tg_token: tok || (CFG.hasTg ? "•••" : null),
     tg_chat: $("#nTgChat").value.trim(),
     min_prio: CFG.minPrio,
-    shop_watch: $("#nShop").value.split(/[,;\n]/).map(s => s.trim()).filter(Boolean)
+    shop_watch: []
   };
   notifDest.forEach(d => { patch["dest_" + d.id] = !!d.on; });
   try {
