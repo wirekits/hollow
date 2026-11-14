@@ -27,6 +27,8 @@ pub struct NotifyCfg {
     pub dest_chat: bool,       // в тим-чат игры
     pub dest_discord: bool,
     pub dest_tg: bool,
+    /// Предметы для алерта по магазинам (подстрока названия, без регистра): «c4», «rocket».
+    pub shop_watch: Vec<String>,
 }
 
 impl Default for NotifyCfg {
@@ -40,6 +42,7 @@ impl Default for NotifyCfg {
             dest_chat: false,
             dest_discord: false,
             dest_tg: false,
+            shop_watch: Vec::new(),
         }
     }
 }

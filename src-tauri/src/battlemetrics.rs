@@ -704,6 +704,7 @@ async fn poll_once(app: &AppHandle) -> Result<(), PollErr> {
     let (ok_servers, failed) = query_all(&servers).await;
     let servers_ok = ok_servers.len();
 
+    let mut came_online: Vec<crate::types::Alert> = Vec::new();
     let now = now_ms();
     let (names_changed, ()) = {
         let st = app.state::<BmState>();
@@ -758,7 +759,17 @@ async fn poll_once(app: &AppHandle) -> Result<(), PollErr> {
                 &failed,
             );
             if let Some(d) = dec {
+                let was_open = open_srv.is_some();
                 apply_presence(ss, d.on, &d.srv, now, last_poll, d.since_hint);
+                // первый опрос после запуска молчит: иначе каждый старт приложения = пачка алертов
+                if d.on && !was_open && last_poll > 0 {
+                    let who = t.names.first().cloned().or_else(|| t.steam_id.clone()).unwrap_or_else(|| k.clone());
+                    came_online.push(target_alert(&who, &d.srv, server_name.as_deref()));
+                } else if d.on && last_poll > 0 && open_srv.as_deref() == Some(STEAM_ONLY) && server_name.as_deref() == Some(d.srv.as_str()) {
+                    // был «в Steam», теперь виден на нашем сервере
+                    let who = t.names.first().cloned().or_else(|| t.steam_id.clone()).unwrap_or_else(|| k.clone());
+                    came_online.push(target_alert(&who, &d.srv, server_name.as_deref()));
+                }
                 match d.src {
                     Some(s) if d.on => g.src.insert(k.clone(), s),
                     _ => g.src.remove(&k),
@@ -789,6 +800,10 @@ async fn poll_once(app: &AppHandle) -> Result<(), PollErr> {
     // lastPoll пишем каждый раз: по нему закрываются сессии после простоя приложения
     save_sessions(app);
     emit_targets(app);
+    for a in came_online {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { crate::notify::dispatch(&app, a).await });
+    }
     match steam_err {
         Some(e) => Err(e),
         None => Ok(()),
@@ -977,6 +992,20 @@ fn steam_seen(p: &Presence, rust_srv: String) -> (bool, String) {
     } else {
         (false, String::new())
     }
+}
+
+/// Алерт «цель зашла»: на наш сервер — high, в Rust на другом — med, только в Steam (игра скрыта) — low.
+fn target_alert(who: &str, srv: &str, pack_name: Option<&str>) -> crate::types::Alert {
+    let (prio, title, text) = if pack_name.map_or(false, |n| !n.is_empty() && n == srv) {
+        ("high", "Цель на нашем сервере", format!("{who} зашёл на {srv}"))
+    } else if srv == STEAM_ONLY {
+        ("low", "Цель в сети", format!("{who} в Steam (игра скрыта)"))
+    } else if srv.is_empty() {
+        ("med", "Цель в сети", format!("{who} в Rust"))
+    } else {
+        ("med", "Цель в сети", format!("{who} в Rust · {srv}"))
+    };
+    crate::types::Alert { kind: "target".into(), prio: prio.into(), title: title.into(), text }
 }
 
 /// ip сервера пачки, найденного по имени в master list (кэш `cached_resolve`, ключ "name:<имя>").
@@ -1186,7 +1215,8 @@ fn apply_presence(ss: &mut Vec<Session>, on: bool, srv: &str, now: i64, last_pol
     let open = ss.last_mut().filter(|s| s.stop.is_none());
     match (open, on) {
         (Some(s), true) => {
-            if s.srv.is_empty() && !srv.is_empty() {
+            // сервер стал известен (или вместо «в Steam» появился настоящий) — уточняем открытую сессию
+            if (s.srv.is_empty() || s.srv == STEAM_ONLY) && !srv.is_empty() && srv != s.srv && srv != STEAM_ONLY {
                 s.srv = srv.to_string();
                 true
             } else {
@@ -1498,6 +1528,15 @@ mod tests {
         );
         assert_eq!(parse_vanity(&j(r#"{"response":{"success":42,"message":"No match"}}"#)), None);
         assert_eq!(parse_vanity(&j(r#"{}"#)), None);
+    }
+
+    #[test]
+    fn target_alert_priority() {
+        let a = target_alert("John", "Blood Rust", Some("Blood Rust"));
+        assert_eq!((a.prio.as_str(), a.title.as_str()), ("high", "Цель на нашем сервере"));
+        assert_eq!(target_alert("John", "1.2.3.4:28015", Some("Blood Rust")).prio, "med");
+        assert_eq!(target_alert("John", STEAM_ONLY, None).prio, "low");
+        assert_eq!(target_alert("John", "", None).text, "John в Rust");
     }
 
     #[test]

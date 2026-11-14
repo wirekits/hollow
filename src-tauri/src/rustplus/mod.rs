@@ -37,7 +37,7 @@ enum Cmd {
 
 /// Последний состав команды из Rust+: (когда, SteamID -> в сети). Нужен профилю игрока:
 /// Steam не показывает «в Rust» при закрытых игровых данных, а Rust+ про тимейтов знает точно.
-static TEAM_SEEN: Mutex<Option<(i64, HashMap<String, bool>)>> = Mutex::new(None);
+static TEAM_SEEN: Mutex<Option<(i64, HashMap<String, (bool, String)>)>> = Mutex::new(None);
 /// Снимок команды старше этого не доверяем (опрос каждые 5 с, значит соединение пропало).
 const TEAM_FRESH_MS: i64 = 60_000;
 
@@ -48,7 +48,17 @@ pub fn team_online(steam_id: &str) -> Option<bool> {
     if now_ms() - at > TEAM_FRESH_MS {
         return None;
     }
-    m.get(steam_id).copied()
+    m.get(steam_id).map(|(on, _)| *on)
+}
+
+/// Квадрат игрока команды по последнему снимку Rust+ (у погибшего — место смерти). None — нет данных.
+pub fn member_grid(steam_id: &str) -> Option<String> {
+    let g = TEAM_SEEN.lock().ok()?;
+    let (at, m) = g.as_ref()?;
+    if now_ms() - at > TEAM_FRESH_MS {
+        return None;
+    }
+    m.get(steam_id).map(|(_, grid)| grid.clone()).filter(|s| !s.is_empty())
 }
 
 const ENTITY_SWITCH: i32 = 1;
@@ -82,6 +92,7 @@ fn emit<S: Serialize + Clone>(app: &AppHandle, name: &str, payload: S) {
 }
 
 fn status(app: &AppHandle, state: &str, msg: &str) {
+    log::info!("rust+: {state}{}{msg}", if msg.is_empty() { "" } else { " · " });
     emit(app, "rp_status", serde_json::json!({ "state": state, "msg": msg }));
 }
 
@@ -119,6 +130,7 @@ struct Session {
     decay_gate: alerts::DecayGate,
     decay: BTreeMap<u32, i64>,
     last_alarms: Option<serde_json::Value>,
+    shops: alerts::ShopWatch,
 }
 
 fn forms_decay(m: &BTreeMap<u32, i64>, names: &HashMap<u32, String>) -> serde_json::Value {
@@ -169,6 +181,7 @@ impl Session {
             decay_gate: alerts::DecayGate::default(),
             decay: BTreeMap::new(),
             last_alarms: None,
+            shops: alerts::ShopWatch::default(),
         }
     }
 
@@ -191,7 +204,7 @@ impl Session {
             fire(app, a);
         }
         if let Ok(mut g) = TEAM_SEEN.lock() {
-            *g = Some((now_ms(), t.members.iter().map(|m| (m.steam_id.to_string(), m.is_online)).collect()));
+            *g = Some((now_ms(), t.members.iter().map(|m| (m.steam_id.to_string(), (m.is_online, grid(m.x, m.y)))).collect()));
         }
         self.team_snap = Some(next);
         self.last_team = Some(t);
@@ -276,6 +289,22 @@ impl Session {
         if let Some(t) = self.last_team.clone() {
             let v = forms::team_form(&t, self.map_size, &mut self.presence, now_ms());
             emit(app, "team_info", v);
+        }
+    }
+
+    /// Алерты по магазинам: новые предложения с предметами из настроек (notify.shop_watch).
+    fn check_shops(&mut self, app: &AppHandle) {
+        if self.map_size <= 0.0 {
+            return; // без размера карты нет квадратов; не запоминаем снимок, дождёмся карты
+        }
+        let watch = app
+            .try_state::<crate::profiles::ProfilesState>()
+            .and_then(|s| s.active_profile())
+            .map(|p| p.notify.shop_watch)
+            .unwrap_or_default();
+        let offers = forms::shop_offers(&self.markers, self.map_size);
+        for a in self.shops.diff(&offers, &watch) {
+            fire(app, a);
         }
     }
 
@@ -369,6 +398,7 @@ impl Session {
             self.markers = m.markers;
             self.have_markers = true;
             self.emit_markers(app);
+            self.check_shops(app);
         }
         if r.success.is_some() {
             if let Kind::Device(id, on) = kind {

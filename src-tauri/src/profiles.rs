@@ -209,6 +209,17 @@ fn apply_notify(n: &mut crate::types::NotifyCfg, v: &Value) -> Result<(), String
             *slot = *b;
         }
     }
+    if let Some(Value::Array(a)) = v.get("shop_watch") {
+        let mut list: Vec<String> = a
+            .iter()
+            .filter_map(|x| x.as_str())
+            .map(|s| s.trim().chars().take(40).collect::<String>())
+            .filter(|s| !s.is_empty())
+            .collect();
+        list.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        list.truncate(30);
+        n.shop_watch = list;
+    }
     Ok(())
 }
 

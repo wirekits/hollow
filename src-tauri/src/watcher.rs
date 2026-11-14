@@ -118,6 +118,7 @@ fn emit_status(app: &AppHandle) {
 }
 
 fn set_state(app: &AppHandle, state: &str, msg: &str) {
+    log::info!("наблюдатель: {state}{}{msg}", if msg.is_empty() { "" } else { " · " });
     with(|s| {
         s.state = state.into();
         s.msg = msg.into();

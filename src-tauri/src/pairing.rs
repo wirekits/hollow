@@ -4,7 +4,7 @@
 //! Секреты хранятся только в `app_data_dir()/pairing.json`, наружу (события, логи) не отдаются.
 mod fcm;
 mod mcs;
-mod notif;
+pub mod notif;
 mod store;
 
 use serde_json::json;
@@ -45,6 +45,9 @@ fn now_secs() -> u64 {
 }
 
 fn emit_state(app: &AppHandle, state: &str, msg: &str) {
+    if state == "error" {
+        log::warn!("pairing: {msg}");
+    }
     let _ = app.emit("pairing", json!({ "state": state, "msg": msg }));
 }
 
@@ -245,6 +248,7 @@ async fn handle_data(
     match notif::parse(&app_data) {
         Ok(notif::Notif::Server(sp)) => apply_server(app, sp).await,
         Ok(notif::Notif::Entity(ep)) => apply_entity(app, ep),
+        Ok(notif::Notif::Death(d)) => crate::deaths::on_death(app, d).await,
         Ok(notif::Notif::Ignored(_)) => {}
         Err(e) => emit_state(app, "error", &format!("Не удалось разобрать уведомление Rust+: {e}")),
     }

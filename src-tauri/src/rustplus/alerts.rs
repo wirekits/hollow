@@ -24,6 +24,83 @@ fn alert(kind: &str, prio: &str, title: &str, text: String) -> Alert {
     Alert { kind: kind.into(), prio: prio.into(), title: title.into(), text }
 }
 
+// ---------- магазины ----------
+
+/// Одно предложение автомата: продаёт `qty` × item за `cost` × currency.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShopOffer {
+    /// Устойчивый ключ: позиция + товар + валюта + цена (новая цена = новое предложение).
+    pub key: String,
+    pub grid: String,
+    pub item: String,
+    pub qty: i32,
+    pub cost: i32,
+    pub currency: String,
+}
+
+/// Русские и жаргонные названия -> точное английское название предмета. Остальное ищем подстрокой.
+fn alias(term: &str) -> Option<&'static str> {
+    Some(match term {
+        "c4" | "с4" | "си4" | "ц4" => "Timed Explosive Charge",
+        "ракета" | "ракеты" | "рокет" => "Rocket",
+        "мс" | "млрс" | "mlrs" => "MLRS Rocket",
+        "сатчел" | "сумка" => "Satchel Charge",
+        "взрывчатка" | "эксплозив" => "Explosives",
+        "сера" => "Sulfur",
+        "порох" | "гп" => "Gun Powder",
+        "калаш" | "ак" | "ак47" | "ak" => "Assault Rifle",
+        "болт" => "Bolt Action Rifle",
+        "мп5" | "mp5" => "MP5A4",
+        "тц" | "шкаф" => "Tool Cupboard",
+        "мвк" | "hqm" => "High Quality Metal",
+        "металл" => "Metal Fragments",
+        "скрап" => "Scrap",
+        _ => return None,
+    })
+}
+
+/// Подходит ли предмет под список слежения.
+pub fn shop_matches(item: &str, watch: &[String]) -> bool {
+    let it = item.to_lowercase();
+    watch.iter().any(|w| {
+        let w = w.trim().to_lowercase();
+        if w.is_empty() {
+            return false;
+        }
+        match alias(&w) {
+            Some(exact) => it == exact.to_lowercase(),
+            None => it.contains(&w),
+        }
+    })
+}
+
+/// Новые предложения с нужными предметами. Первый снимок после подключения молча запоминается.
+#[derive(Default)]
+pub struct ShopWatch {
+    seen: std::collections::HashSet<String>,
+    primed: bool,
+}
+
+impl ShopWatch {
+    pub fn diff(&mut self, offers: &[ShopOffer], watch: &[String]) -> Vec<Alert> {
+        let now: std::collections::HashSet<String> = offers.iter().map(|o| o.key.clone()).collect();
+        let mut out = Vec::new();
+        if self.primed && !watch.is_empty() {
+            for o in offers.iter().filter(|o| !self.seen.contains(&o.key) && shop_matches(&o.item, watch)) {
+                out.push(alert(
+                    "shop",
+                    "med",
+                    &format!("Магазин [{}]", o.grid),
+                    format!("продают {} ×{} за {} {}", o.item, o.qty, o.cost, o.currency),
+                ));
+            }
+        }
+        self.seen = now;
+        self.primed = true;
+        out
+    }
+}
+
 // ---------- команда ----------
 
 #[derive(Clone, Debug, PartialEq)]
@@ -250,6 +327,37 @@ pub fn decay_form(expiries: &BTreeMap<u32, i64>, now_secs: i64, names: &HashMap<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn offer(key: &str, item: &str) -> ShopOffer {
+        ShopOffer { key: key.into(), grid: "G12".into(), item: item.into(), qty: 1, cost: 500, currency: "Metal Fragments".into() }
+    }
+
+    #[test]
+    fn shop_matching_aliases_and_substrings() {
+        let w = |s: &[&str]| s.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert!(shop_matches("Timed Explosive Charge", &w(&["с4"])));
+        assert!(shop_matches("Timed Explosive Charge", &w(&["C4"])));
+        assert!(shop_matches("Rocket", &w(&["ракета"])));
+        assert!(!shop_matches("MLRS Rocket", &w(&["ракета"]))); // алиас = точное имя
+        assert!(shop_matches("MLRS Rocket", &w(&["rocket"]))); // подстрока
+        assert!(!shop_matches("Wood", &w(&["c4", ""])));
+    }
+
+    #[test]
+    fn shop_watch_alerts_only_new_offers() {
+        let watch = vec!["c4".to_string()];
+        let mut sw = ShopWatch::default();
+        // первый снимок молчит
+        assert!(sw.diff(&[offer("a", "Timed Explosive Charge")], &watch).is_empty());
+        // то же предложение — тишина; новое с C4 — алерт; новое не из списка — тишина
+        let al = sw.diff(&[offer("a", "Timed Explosive Charge"), offer("b", "Timed Explosive Charge"), offer("c", "Wood")], &watch);
+        assert_eq!(al.len(), 1);
+        assert_eq!(al[0].title, "Магазин [G12]");
+        assert_eq!(al[0].text, "продают Timed Explosive Charge ×1 за 500 Metal Fragments");
+        // пропало и вернулось — снова новое
+        assert!(sw.diff(&[], &watch).is_empty());
+        assert_eq!(sw.diff(&[offer("b", "Timed Explosive Charge")], &watch).len(), 1);
+    }
 
     fn m(id: u64, name: &str, online: bool, alive: bool) -> MemberSnap {
         MemberSnap { steam_id: id, name: name.into(), online, alive, x: 100.0, y: 200.0 }

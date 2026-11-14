@@ -33,11 +33,38 @@ pub struct EntityPair {
     pub relay_id: Option<String>,
 }
 
+/// Смерть игрока, к которому привязан Rust+ (push приходит только самому убитому).
+/// Формат по rustplusplus (FcmListener.js + getPlayerDeathEmbed): channelId "player", body.type "death",
+/// текст в `title` («You were killed by <ник>»), `body.targetId` — SteamID убийцы (пусто у NPC/животных),
+/// `body.name` — имя сервера.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Death {
+    pub title: String,
+    pub killer_id: String,
+    pub server: String,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Notif {
     Server(ServerPair),
     Entity(EntityPair),
+    Death(Death),
     Ignored(String),
+}
+
+/// Ник убийцы из заголовка «You were killed by X» (по-русски клиент не локализует push, но на всякий случай
+/// понимаем и «Вас убил X»). Не распознали — None, тогда показываем заголовок как есть.
+pub fn killer_from_title(title: &str) -> Option<String> {
+    let t = title.trim();
+    for p in ["You were killed by ", "you were killed by ", "Вас убил ", "Тебя убил "] {
+        if let Some(rest) = t.strip_prefix(p) {
+            let n = rest.trim().trim_end_matches(['.', '!']).trim();
+            if !n.is_empty() {
+                return Some(n.to_string());
+            }
+        }
+    }
+    None
 }
 
 fn get<'a>(d: &'a [(String, String)], k: &str) -> Option<&'a str> {
@@ -67,11 +94,24 @@ pub fn parse(app_data: &[(String, String)]) -> Result<Notif, String> {
     let Some(body_raw) = get(app_data, "body") else {
         return Ok(Notif::Ignored("нет поля body".into()));
     };
+    let title = get(app_data, "title").unwrap_or("");
+    if channel == "player" {
+        let Ok(body) = serde_json::from_str::<Value>(body_raw) else {
+            return Ok(Notif::Ignored("player: body не JSON".into()));
+        };
+        if body.get("type").and_then(|t| t.as_str()) != Some("death") {
+            return Ok(Notif::Ignored("player/не death".into()));
+        }
+        return Ok(Notif::Death(Death {
+            title: title.trim().to_string(),
+            killer_id: s(&body, "targetId").unwrap_or_default(),
+            server: s(&body, "name").unwrap_or_default(),
+        }));
+    }
     if channel != "pairing" {
         return Ok(Notif::Ignored(format!("канал «{channel}»")));
     }
     let body: Value = serde_json::from_str(body_raw).map_err(|_| "body уведомления не JSON".to_string())?;
-    let title = get(app_data, "title").unwrap_or("");
     match body.get("type").and_then(|t| t.as_str()) {
         Some("server") => {
             // ip/port не обязательны (см. комментарий модуля) — пустая строка/0 вместо ошибки разбора.
@@ -201,6 +241,23 @@ mod tests {
         assert!(matches!(parse(&ad("pairing", b)).unwrap(), Notif::Entity(e) if e.kind == "alarm"));
         let b = r#"{"type":"entity","entityId":"9","entityName":"Something Else"}"#;
         assert!(matches!(parse(&ad("pairing", b)).unwrap(), Notif::Ignored(_)));
+    }
+
+    #[test]
+    fn death_push() {
+        let mut d = ad("player", r#"{"type":"death","targetId":"76561198444816488","name":"Blood Rust - Black","img":""}"#);
+        d[1].1 = "You were killed by John Silver".into();
+        assert_eq!(
+            parse(&d).unwrap(),
+            Notif::Death(Death { title: "You were killed by John Silver".into(), killer_id: "76561198444816488".into(), server: "Blood Rust - Black".into() })
+        );
+        // NPC: targetId пустой
+        let n = parse(&ad("player", r#"{"type":"death","targetId":""}"#)).unwrap();
+        assert!(matches!(n, Notif::Death(Death { ref killer_id, .. }) if killer_id.is_empty()));
+        // другие типы канала player игнорируются
+        assert!(matches!(parse(&ad("player", r#"{"type":"login"}"#)).unwrap(), Notif::Ignored(_)));
+        assert_eq!(killer_from_title("You were killed by John Silver"), Some("John Silver".into()));
+        assert_eq!(killer_from_title("You died"), None);
     }
 
     #[test]

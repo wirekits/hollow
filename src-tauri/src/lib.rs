@@ -1,5 +1,8 @@
 mod a2s;
 mod automation;
+mod deaths;
+mod items;
+mod logfile;
 mod battlemetrics;
 mod notify;
 mod overlay;
@@ -28,10 +31,13 @@ pub fn run() {
         .setup(|app| {
             shell::setup(app)?;
             let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            logfile::init(&dir);
             let st = app.state::<profiles::ProfilesState>();
             st.load(&dir);
             let server = st.active_server();
             let token = st.active_bm_token();
+            let h2 = app.handle().clone();
+            tauri::async_runtime::spawn(async move { items::init(&h2).await });
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 battlemetrics::configure(&handle, token).await;
@@ -70,6 +76,9 @@ pub fn run() {
             watcher::watcher_logout,
             watcher::watcher_status,
             watcher::watcher_add_friend,
+            deaths::deaths_list,
+            deaths::deaths_clear,
+            logfile::log_open,
         ])
         .run(tauri::generate_context!())
         .expect("error while running hollow++");

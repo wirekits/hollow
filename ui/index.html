@@ -1518,6 +1518,10 @@ html.no-motion #bgfx{display:none}
             <div class="card-h"><svg class="ic"><use href="#i-hist"/></svg><span data-t="alrtHist">История</span></div>
             <div id="alarmHist"></div>
           </div>
+          <div class="card">
+            <div class="card-h"><svg class="ic"><use href="#i-target"/></svg><span data-t="dthT">Смерти</span><span class="n" id="dthN"></span><button type="button" class="btn sm ghost" id="dthClr" data-t="dthClr" hidden>Очистить</button></div>
+            <div id="dthList"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -1583,6 +1587,7 @@ html.no-motion #bgfx{display:none}
                 <small class="err" id="wErr" role="alert"></small>
               </div></div>
             </div>
+            <div class="pack-row"><button type="button" class="btn ghost" id="logOpen" data-t="logOpen">Открыть папку с логами</button></div>
 
             <small class="err" id="pErr" role="alert"></small>
             <div class="cfg-sub" data-t="setPair">Rust+</div>
@@ -1643,6 +1648,9 @@ html.no-motion #bgfx{display:none}
               </div>
             </div>
             <div class="row" style="margin-top:var(--sp3)"><div><b data-t="alrtMin">Минимальная важность</b></div><div class="seg" id="nPrio"></div></div>
+            <div class="cfg-sub" data-t="shopWatchT">Алерт по магазинам</div>
+            <p class="pair-hint" data-t="shopWatchHint"></p>
+            <div class="addbox"><input id="nShop" data-ph="shopWatchPh" data-al="shopWatchPh" autocomplete="off" spellcheck="false" maxlength="400"></div>
             <small class="err" id="nErr" role="alert"></small>
             <div class="pack-row">
               <button type="button" class="btn pri" id="nSave" data-t="pSave">Сохранить</button>
@@ -3794,7 +3802,15 @@ function renderServer() {
   $("#stSeed").textContent = server.seed == null ? "—" : server.seed;
 }
 function setServer(p) { Object.assign(server, { connected: true }, p || {}); if (server.mapSize) MAP = server.mapSize; renderServer(); rw(); renderTeam(); }
+const teamAlive = new Map();   // имя -> был жив (для смертей тимейтов)
 function setTeam(list) {
+  try {                        // тимейт был жив и умер: в карточку «Смерти» с квадратом
+    (Array.isArray(list) ? list : []).forEach(m => {
+      const was = teamAlive.get(m.n);
+      if (was === true && m.alive === false && typeof onMateDeath === "function") onMateDeath(m);
+      teamAlive.set(m.n, !!m.alive);
+    });
+  } catch (e) {}
   fill(team, list);
   renderTeam(); renderTrk(trkFilter()); renderFarm();
 }
@@ -4219,7 +4235,10 @@ Object.assign(L.ru, {
   wOff: "не подключён", wConn: "подключение…", wGuardEmail: "Steam прислал код на почту аккаунта: введи его", wGuardDevice: "введи код из мобильного Steam Guard или подтверди вход в приложении",
   wOnline: "{a} · друзей {f} · в Rust {r}", wConfirm: "если Steam просит подтверждение — подтверди вход в мобильном приложении",
   wAddFriend: "В друзья наблюдателю", wPending: "Заявка отправлена", wIsFriend: "Друг наблюдателя", wSent: "Заявка в друзья отправлена: цель должна принять",
-  wFriendTip: "Когда цель примет заявку, её игра и сервер будут видны даже при скрытых игровых данных (режим «для друзей»)", errWLogin: "Введи логин и пароль"
+  wFriendTip: "Когда цель примет заявку, её игра и сервер будут видны даже при скрытых игровых данных (режим «для друзей»)", errWLogin: "Введи логин и пароль",
+  shopWatchT: "Алерт по магазинам", shopWatchHint: "Предметы через запятую. Когда в магазине появится такой товар, придёт алерт «Магазин [квадрат]». Понимает с4, ракета, мс, сера, калаш и английские названия.",
+  shopWatchPh: "с4, ракета, мс", logOpen: "Открыть папку с логами",
+  dthT: "Смерти", dthClr: "Очистить", dthNone: "Смертей пока нет", dthMe: "Тебя убил", dthMate: "погиб", dthStat: "Стата убийцы"
 });
 Object.assign(L.en, {
   setNotify: "Notifications", notifyHint: "Where alerts go: Discord, Telegram, team chat, the panel. Secrets are never shown after saving.",
@@ -4238,8 +4257,40 @@ Object.assign(L.en, {
   wOff: "not connected", wConn: "connecting…", wGuardEmail: "Steam emailed a code to the account: enter it", wGuardDevice: "enter the mobile Steam Guard code or approve the login in the app",
   wOnline: "{a} · friends {f} · in Rust {r}", wConfirm: "if Steam asks for confirmation, approve the login in the mobile app",
   wAddFriend: "Add to watcher friends", wPending: "Request sent", wIsFriend: "Watcher friend", wSent: "Friend request sent: the target has to accept",
-  wFriendTip: "Once the target accepts, their game and server are visible even with friends-only game details", errWLogin: "Enter login and password"
+  wFriendTip: "Once the target accepts, their game and server are visible even with friends-only game details", errWLogin: "Enter login and password",
+  shopWatchT: "Shop alerts", shopWatchHint: "Items, comma separated. When a shop lists one, you get a \"Shop [grid]\" alert. Understands c4, rocket, mlrs and English item names.",
+  shopWatchPh: "c4, rocket, mlrs", logOpen: "Open logs folder",
+  dthT: "Deaths", dthClr: "Clear", dthNone: "No deaths yet", dthMe: "Killed by", dthMate: "died", dthStat: "Killer stats"
 });
+/* смерти: свои из бэкенда (deaths_list / событие deaths), тимейтов ловим по team_info в этой сессии */
+let myDeaths = [], mateDeaths = [];
+function onMateDeath(m) {
+  mateDeaths.unshift({ at: Date.now(), name: m.n, grid: m.u != null ? gridOf(m.u, m.v) : "" });
+  mateDeaths = mateDeaths.slice(0, 30);
+  renderDeaths();
+}
+function renderDeaths() {
+  const box = $("#dthList"); if (!box) return;
+  const hm = t => { const d = new Date(+t); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+  const all = myDeaths.map(d => ({ me: true, ...d })).concat(mateDeaths.map(d => ({ me: false, ...d }))).sort((a, b) => b.at - a.at).slice(0, 40);
+  $("#dthN").textContent = all.length ? all.length : "";
+  $("#dthClr").hidden = !myDeaths.length;
+  box.innerHTML = all.length ? all.map(d => d.me
+    ? `<div class="row"><div><b>${$t("dthMe")} ${esc(d.killer)}</b><small>${hm(d.at)}${d.grid ? " · " + esc(d.grid) : ""}</small></div>${d.killer_id ? `<button type="button" class="btn sm" data-sid="${esc(d.killer_id)}">${$t("dthStat")}</button>` : ""}</div>`
+    : `<div class="row"><div><b>${esc(d.name)} ${$t("dthMate")}</b><small>${hm(d.at)}${d.grid ? " · " + esc(d.grid) : ""}</small></div></div>`).join("")
+    : E("dthNone");
+  box.querySelectorAll("[data-sid]").forEach(b => { b.onclick = () => openProfile(b.dataset.sid); });
+}
+(function initDeaths() {
+  if (!$("#dthList")) return;
+  $("#dthClr").onclick = async () => { try { await inv("deaths_clear"); } catch (e) {} myDeaths = []; renderDeaths(); };
+  const lo = $("#logOpen"); if (lo) lo.onclick = () => inv("log_open").catch(e => toast(String(e), "err"));
+  renderDeaths();
+  if (IS_TAURI) {
+    try { window.__TAURI__.event.listen("deaths", ev => { myDeaths = Array.isArray(ev.payload) ? ev.payload : []; renderDeaths(); }); } catch (e) {}
+    inv("deaths_list").then(l => { myDeaths = Array.isArray(l) ? l : []; renderDeaths(); }).catch(() => {});
+  }
+})();
 /* аккаунт-наблюдатель: состояние приходит событием watcher_status */
 let WST = { state: "off", account: "", msg: "", guard: "", friends: 0, inRust: 0 };
 function renderWatcher() {
@@ -4293,6 +4344,7 @@ function applyCfgFromPack() {
   const c = curPack() || {}, n = c.notify || {}, a = c.automation || {};
   CFG.hasHook = !!n.discord_webhook; CFG.hasTg = !!n.tg_token; CFG.hasSteam = !!c.steam_key;
   CFG.tgChat = n.tg_chat || "";
+  { const ns = $("#nShop"); if (ns && document.activeElement !== ns) ns.value = (Array.isArray(n.shop_watch) ? n.shop_watch : []).join(", "); }
   CFG.minPrio = ["low", "med", "high"].includes(n.min_prio) ? n.min_prio : "low";
   if (c.notify) ["app", "chat", "discord", "tg"].forEach(id => { const d = notifDest.find(x => x.id === id); if (d) d.on = !!n["dest_" + id]; });
   const grps = (Array.isArray(a.groups) ? a.groups : []).map(g => ({ id: String(g.id || uid()), name: g.name || "", device_ids: (Array.isArray(g.device_ids) ? g.device_ids : []).map(String) }));
@@ -4415,7 +4467,8 @@ async function saveNotify(silent) {
     discord_webhook: hook || (CFG.hasHook ? "•••" : null),
     tg_token: tok || (CFG.hasTg ? "•••" : null),
     tg_chat: $("#nTgChat").value.trim(),
-    min_prio: CFG.minPrio
+    min_prio: CFG.minPrio,
+    shop_watch: $("#nShop").value.split(/[,;\n]/).map(s => s.trim()).filter(Boolean)
   };
   notifDest.forEach(d => { patch["dest_" + d.id] = !!d.on; });
   try {

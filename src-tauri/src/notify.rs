@@ -248,7 +248,9 @@ pub async fn dispatch(app: &AppHandle, alert: Alert) {
         if let Some(wh) = clean(&cfg.discord_webhook) {
             let a = alert.clone();
             tauri::async_runtime::spawn(async move {
-                let _ = send_discord(&wh, &a).await;
+                if let Err(e) = send_discord(&wh, &a).await {
+                    log::warn!("уведомление: {e}");
+                }
             });
         }
     }
@@ -256,7 +258,9 @@ pub async fn dispatch(app: &AppHandle, alert: Alert) {
         if let (Some(tok), Some(chat)) = (clean(&cfg.tg_token), clean(&cfg.tg_chat)) {
             let a = alert.clone();
             tauri::async_runtime::spawn(async move {
-                let _ = send_tg(&tok, &chat, &a).await;
+                if let Err(e) = send_tg(&tok, &chat, &a).await {
+                    log::warn!("уведомление: {}", e.replace(tok.as_str(), "***"));
+                }
             });
         }
     }

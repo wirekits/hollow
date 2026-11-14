@@ -40,6 +40,11 @@ pub fn grid_of(u: f32, v: f32, map_size: f32) -> String {
 }
 
 pub fn item_name(id: i32) -> String {
+    if id != ITEM_SCRAP {
+        if let Some(n) = crate::items::name(id) {
+            return n;
+        }
+    }
     match id {
         ITEM_WOOD => "Wood".into(),
         ITEM_STONE => "Stones".into(),
@@ -110,6 +115,31 @@ pub fn team_form(
     Value::Array(list)
 }
 
+/// Предложения автоматов для алертов (только то, что есть в наличии).
+pub fn shop_offers(markers: &[AppMarker], map_size: f32) -> Vec<super::alerts::ShopOffer> {
+    let mut out = Vec::new();
+    for m in markers.iter().filter(|m| m.r#type == marker_type::VENDING_MACHINE) {
+        let (u, v) = uv(m.x, m.y, map_size);
+        let grid = grid_of(u, v, map_size);
+        for o in m.sell_orders.iter().filter(|o| o.amount_in_stock > 0) {
+            out.push(super::alerts::ShopOffer {
+                key: format!("{}:{}:{}:{}:{}:{}", m.x.round(), m.y.round(), o.item_id, o.currency_id, o.cost_per_item, o.quantity),
+                grid: grid.clone(),
+                item: item_name(o.item_id),
+                qty: o.quantity,
+                cost: o.cost_per_item,
+                currency: item_name(o.currency_id),
+            });
+        }
+    }
+    out
+}
+
+/// Подпись магазина: «Магазин [G12]». Имена, которые игроки дают автоматам, не используем (часто спам).
+pub fn shop_label(grid: &str) -> String {
+    if grid.is_empty() { "Магазин".into() } else { format!("Магазин [{grid}]") }
+}
+
 /// setMarkers: [{ type: "monument"|"shop"|"cargo"|"other", name, u, v, rot }].
 /// rot в радианах (Rust+ отдаёт градусы).
 pub fn markers_form(markers: &[AppMarker], monuments: &[Monument], map_size: f32) -> Value {
@@ -120,7 +150,7 @@ pub fn markers_form(markers: &[AppMarker], monuments: &[Monument], map_size: f32
     }
     for m in markers {
         let (ty, name) = match m.r#type {
-            marker_type::VENDING_MACHINE => ("shop", m.name.clone().unwrap_or_default()),
+            marker_type::VENDING_MACHINE => ("shop", String::new()), // имя ниже: «Магазин [квадрат]»
             marker_type::CARGO_SHIP => ("cargo", "Cargo Ship".to_string()),
             marker_type::CH47 => ("other", "Chinook".to_string()),
             marker_type::PATROL_HELICOPTER => ("other", "Patrol Helicopter".to_string()),
@@ -128,6 +158,7 @@ pub fn markers_form(markers: &[AppMarker], monuments: &[Monument], map_size: f32
             _ => continue, // игроки, взрывы, радиусы не рисуем
         };
         let (u, v) = uv(m.x, m.y, map_size);
+        let name = if ty == "shop" { shop_label(&grid_of(u, v, map_size)) } else { name };
         out.push(json!({ "type": ty, "name": name, "u": u, "v": v, "rot": m.rotation.to_radians() }));
     }
     Value::Array(out)
