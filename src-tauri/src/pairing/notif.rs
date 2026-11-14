@@ -3,6 +3,12 @@
 //! channelId=="pairing": body.type=="server" (ip, port, playerId, playerToken, name/desc/img/url/id)
 //! либо body.type=="entity" (entityId, entityName: "Smart Switch" | "Smart Alarm" | "Storage Monitor").
 //! Другие каналы (alarm, player, team) для pairing не нужны и игнорируются.
+//!
+//! **ip/port бывают пустыми.** С обновления Rust 2026-11-05 (переход на ретранслятор Facepunch) уведомление
+//! о сопряжении сервера может не нести ip/port — только `id`, id сервера в ретрансляторе
+//! (wss://companion-rust.facepunch.com/socket/<id>). Так же делает rustplusplus (src/util/rustRelay.js,
+//! `pairingAddress`). Поэтому ip/port не обязательны: пустые/битые дают `""`/`0`, `id` идёт в `relay_id`.
+//! Ошибка, только если нет ни адреса, ни id — тогда подключаться не к чему.
 use serde_json::Value;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -12,6 +18,8 @@ pub struct ServerPair {
     pub port: u16,
     pub player_id: String,
     pub player_token: String,
+    /// id сервера в ретрансляторе Facepunch (`body.id`), может быть пустым у старых серверов.
+    pub relay_id: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -64,17 +72,22 @@ pub fn parse(app_data: &[(String, String)]) -> Result<Notif, String> {
     let title = get(app_data, "title").unwrap_or("");
     match body.get("type").and_then(|t| t.as_str()) {
         Some("server") => {
-            let ip = s(&body, "ip").ok_or("в уведомлении сервера нет ip")?;
-            let port: u16 = s(&body, "port")
-                .and_then(|p| p.parse().ok())
-                .ok_or("в уведомлении сервера нет корректного port")?;
+            // ip/port не обязательны (см. комментарий модуля) — пустая строка/0 вместо ошибки разбора.
+            let ip = s(&body, "ip").unwrap_or_default();
+            let port: u16 = s(&body, "port").and_then(|p| p.parse().ok()).unwrap_or(0);
+            let relay_id = s(&body, "id").unwrap_or_default();
+            if relay_id.is_empty() && (ip.is_empty() || port == 0) {
+                return Err("в уведомлении сервера нет ни адреса (ip/port), ни id сервера".into());
+            }
             let player_id = s(&body, "playerId").ok_or("в уведомлении сервера нет playerId")?;
             let player_token = s(&body, "playerToken").ok_or("в уведомлении сервера нет playerToken")?;
             if player_token.parse::<i32>().is_err() {
                 return Err("playerToken не число (ожидается i32)".into());
             }
-            let name = s(&body, "name").unwrap_or_else(|| if title.is_empty() { ip.clone() } else { title.to_string() });
-            Ok(Notif::Server(ServerPair { name, ip, port, player_id, player_token }))
+            let name = s(&body, "name").unwrap_or_else(|| {
+                if !title.is_empty() { title.to_string() } else if !ip.is_empty() { ip.clone() } else { String::new() }
+            });
+            Ok(Notif::Server(ServerPair { name, ip, port, player_id, player_token, relay_id }))
         }
         Some("entity") => {
             let id = s(&body, "entityId").ok_or("в уведомлении устройства нет entityId")?;
@@ -118,20 +131,50 @@ mod tests {
                 ip: "1.2.3.4".into(),
                 port: 28017,
                 player_id: "76561198000000000".into(),
-                player_token: "-1234567".into()
+                player_token: "-1234567".into(),
+                relay_id: "uuid".into()
             })
         );
     }
 
     #[test]
     fn server_errors() {
-        let b = r#"{"type":"server","ip":"1.2.3.4","port":"abc","playerId":"1","playerToken":"2"}"#;
-        assert!(parse(&ad("pairing", b)).is_err());
+        // playerToken не число — единственное, что реально ломает сопряжение, валим с ошибкой.
         let b = r#"{"type":"server","ip":"1.2.3.4","port":"1","playerId":"1","playerToken":"x"}"#;
         assert!(parse(&ad("pairing", b)).is_err());
-        let b = r#"{"type":"server","port":"1","playerId":"1","playerToken":"2"}"#;
+        let b = r#"{"type":"server","id":"r","port":"1","playerId":"1"}"#; // нет playerToken вообще
+        assert!(parse(&ad("pairing", b)).is_err());
+        let b = r#"{"type":"server","id":"r","ip":"1.2.3.4","port":"1","playerToken":"2"}"#; // нет playerId
         assert!(parse(&ad("pairing", b)).is_err());
         assert!(parse(&ad("pairing", "not json")).is_err());
+    }
+
+    /// Живой случай после обновления Rust 2026-11-05: `type:"server"` без ip/port, только `id` ретранслятора.
+    #[test]
+    fn server_pairing_relay_only() {
+        let b = r#"{"type":"server","id":"8c1f0e2a-relay","name":"My Server","playerId":"76561198000000000","playerToken":"-1234567"}"#;
+        let n = parse(&ad("pairing", b)).unwrap();
+        assert_eq!(
+            n,
+            Notif::Server(ServerPair {
+                name: "My Server".into(),
+                ip: "".into(),
+                port: 0,
+                player_id: "76561198000000000".into(),
+                player_token: "-1234567".into(),
+                relay_id: "8c1f0e2a-relay".into()
+            })
+        );
+        // битый port при наличии id — тоже не ошибка.
+        let b = r#"{"type":"server","id":"r","port":"abc","playerId":"1","playerToken":"2"}"#;
+        assert!(matches!(parse(&ad("pairing", b)).unwrap(), Notif::Server(ServerPair { port: 0, .. })));
+    }
+
+    /// Нет ни адреса, ни id — подключаться не к чему, это ошибка.
+    #[test]
+    fn server_pairing_without_address_and_id_is_error() {
+        let b = r#"{"type":"server","name":"My Server","playerId":"76561198000000000","playerToken":"-1234567"}"#;
+        assert!(parse(&ad("pairing", b)).is_err());
     }
 
     #[test]

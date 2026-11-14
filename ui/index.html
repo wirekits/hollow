@@ -4040,7 +4040,7 @@ function packPh() {
   const cur = curPack();
   $("#pTok").placeholder = cur && cur.server && cur.server.player_token ? "•••" : $t("pTokPh");
   const sv = (cur && cur.server) || {};
-  $("#manualSum").textContent = sv.ip ? $t("srvSum") + ": " + sv.ip + (sv.port ? ":" + sv.port : "") : "";
+  $("#manualSum").textContent = sv.ip ? $t("srvSum") + ": " + sv.ip + (sv.port ? ":" + sv.port : "") : sv.relay_id ? $t("srvRelay") : "";
 }
 function fillPackForm() {
   const cur = curPack(), s = (cur && cur.server) || {};
@@ -4057,6 +4057,11 @@ function goSteamKey() {                              // ведёт в Настр
   switchTab("set");
   ["sPack", "fSteam"].forEach(id => { const f = $("#" + id); if (f) { f.classList.add("open"); const h = f.querySelector(".fold-h"); if (h) h.setAttribute("aria-expanded", "true"); } });
   setTimeout(() => { const f = $("#fSteam"); if (f) f.scrollIntoView({ block: "center", behavior: rm() ? "auto" : "smooth" }); const i = $("#stKey"); if (i) i.focus({ preventScroll: true }); }, 80);
+}
+function openManualServer() {                        // сервер не прислал ip/port: ведёт в Настройки → Пачка → Вручную
+  switchTab("set");
+  ["sPack", "fManual"].forEach(id => { const f = $("#" + id); if (f) { f.classList.add("open"); const h = f.querySelector(".fold-h"); if (h) h.setAttribute("aria-expanded", "true"); } });
+  setTimeout(() => { const f = $("#fManual"); if (f) f.scrollIntoView({ block: "center", behavior: rm() ? "auto" : "smooth" }); const i = $("#pIp"); if (i) i.focus({ preventScroll: true }); }, 80);
 }
 function renderRp() {
   const ok = rp.state === "connected";
@@ -4099,7 +4104,9 @@ async function savePack() {
   const ip = v("pIp"), portS = v("pPort"), sid = v("pSid"), tok = v("pTok");
   const er = $("#pErr"), had = cur.server && cur.server.player_token;
   const patch = { name: v("pName") || cur.name };
-  if (!ip && !portS && !sid && !tok) patch.server = null;
+  const relay = cur.server && cur.server.relay_id;
+  if (relay && !ip && !portS) { /* сервер через ретранслятор Facepunch: ip/порта нет, сервер не трогаем */ }
+  else if (!ip && !portS && !sid && !tok) patch.server = null;
   else {
     const port = parseInt(portS, 10), token = tok || had || "";
     if (!ip) { er.textContent = $t("pErrIp"); $("#pIp").focus(); return false; }
@@ -4422,22 +4429,22 @@ setInterval(() => {                                  // «живые» алер�
 
 /* ---------- Этап 3: pairing через Steam, устройства из pairing, блок «Приложение», оверлей ---------- */
 Object.assign(L.ru, {
-  stPair: "Подключить через Steam", stPairStop: "Отмена", manualH: "Вручную", srvSum: "сервер", autoNone: "Появится после сопряжения устройств", grpNoDev: "Нет сопряжённых устройств", errTimeFmt: "Время в формате ЧЧ:ММ (00:00–23:59)",
+  stPair: "Подключить через Steam", stPairStop: "Отмена", manualH: "Вручную", srvSum: "сервер", srvRelay: "через ретранслятор Facepunch", autoNone: "Появится после сопряжения устройств", grpNoDev: "Нет сопряжённых устройств", errTimeFmt: "Время в формате ЧЧ:ММ (00:00–23:59)",
   stPairHint: "Нажми кнопку и войди в Steam. Затем в игре: ESC → Rust+ → Pair (на сервере), а для устройств нажми «Pair» у самого устройства. Всё подтянется само.",
   pst_idle: "Не запущено", pst_registering: "Регистрация…", pst_login: "Войди в Steam в открывшемся окне",
-  pst_waiting: "Жду сопряжения: ESC → Rust+ → Pair", pst_paired: "Сопряжено", pst_error: "Ошибка",
-  pairedSrv: "Сервер сопряжён: {n}", pairedDev: "Устройство добавлено: {n}",
+  pst_waiting: "Жду сопряжения: ESC → Rust+ → Pair", pst_paired: "Сопряжено", pst_error: "Ошибка", pst_partial: "Нужен адрес сервера",
+  pairedSrv: "Сервер сопряжён: {n}", pairedDev: "Устройство добавлено: {n}", pairedNeedAddr: "Сервер {n} не прислал адрес — впиши IP:порт ниже",
   pairedTitle: "Устройства", pairedDevH: "Сопряжённые устройства",
   setApp: "Приложение", appOnly: "Работает только в приложении", appHintLive: "Поведение программы в Windows.",
   appAuto: "Автозапуск с Windows", appTray: "Сворачивать в трей при закрытии", appMin: "Запускать свёрнутым",
   appNative: "Уведомления Windows", appOverlay: "Оверлей"
 });
 Object.assign(L.en, {
-  stPair: "Connect via Steam", stPairStop: "Cancel", manualH: "Manual", srvSum: "server", autoNone: "Available after pairing devices", grpNoDev: "No paired devices", errTimeFmt: "Time as HH:MM (00:00-23:59)",
+  stPair: "Connect via Steam", stPairStop: "Cancel", manualH: "Manual", srvSum: "server", srvRelay: "via Facepunch relay", autoNone: "Available after pairing devices", grpNoDev: "No paired devices", errTimeFmt: "Time as HH:MM (00:00-23:59)",
   stPairHint: "Press the button and sign in to Steam. Then in game: ESC → Rust+ → Pair (on the server); for devices press “Pair” on the device itself. Everything is picked up automatically.",
   pst_idle: "Not started", pst_registering: "Registering…", pst_login: "Sign in to Steam in the window that opened",
-  pst_waiting: "Waiting for pairing: ESC → Rust+ → Pair", pst_paired: "Paired", pst_error: "Error",
-  pairedSrv: "Server paired: {n}", pairedDev: "Device added: {n}",
+  pst_waiting: "Waiting for pairing: ESC → Rust+ → Pair", pst_paired: "Paired", pst_error: "Error", pst_partial: "Server address needed",
+  pairedSrv: "Server paired: {n}", pairedDev: "Device added: {n}", pairedNeedAddr: "Server {n} sent no address — enter IP:port below",
   pairedTitle: "Devices", pairedDevH: "Paired devices",
   setApp: "App", appOnly: "Works only in the app", appHintLive: "How the program behaves in Windows.",
   appAuto: "Start with Windows", appTray: "Minimize to tray on close", appMin: "Start minimized",
@@ -4447,8 +4454,8 @@ let PAIR = { state: "idle", msg: "" };
 function renderPairUi() {
   const st = $("#stPairSt"); if (!st) return;
   const s = PAIR.state || "idle", live = s === "registering" || s === "login" || s === "waiting";
-  st.textContent = IS_TAURI ? ($t("pst_" + s) || s) + (PAIR.msg && (s === "error" || s === "login" || s === "waiting") ? " · " + PAIR.msg : "") : $t("pDemoOnly");
-  $("#stPairLed").classList.toggle("on", s === "paired"); $("#stPairLed").classList.toggle("err", s === "error");
+  st.textContent = IS_TAURI ? ($t("pst_" + s) || s) + (PAIR.msg && (s === "error" || s === "login" || s === "waiting" || s === "partial") ? " · " + PAIR.msg : "") : $t("pDemoOnly");
+  $("#stPairLed").classList.toggle("on", s === "paired"); $("#stPairLed").classList.toggle("err", s === "error" || s === "partial");
   $("#stPairLed").classList.toggle("connecting", s === "registering");
   $("#stPairStop").hidden = !live;
   $("#stPair").hidden = live;
@@ -4511,8 +4518,8 @@ async function loadAppSettings() {
   try {
     if (window.__TAURI__ && window.__TAURI__.event) {
       const on = (name, fn) => window.__TAURI__.event.listen(name, e => fn(e.payload));
-      on("pairing", p => { PAIR = { state: (p && p.state) || "idle", msg: (p && p.msg) || "" }; renderPairUi(); });
-      on("pair_server", p => { toast($t("pairedSrv").replace("{n}", (p && (p.name || p.ip)) || ""), "ok"); loadPacks().catch(() => {}); });
+      on("pairing", p => { PAIR = { state: (p && p.state) || "idle", msg: (p && p.msg) || "" }; renderPairUi(); if (PAIR.state === "partial") openManualServer(); });
+      on("pair_server", p => { toast($t(p && p.partial ? "pairedNeedAddr" : "pairedSrv").replace("{n}", (p && (p.name || p.ip)) || ""), p && p.partial ? "err" : "ok"); loadPacks().catch(() => {}); });
       on("pair_device", p => { toast($t("pairedDev").replace("{n}", (p && (p.name || p.id)) || ""), "ok"); loadPacks().catch(() => {}); });
     }
   } catch (e) {}

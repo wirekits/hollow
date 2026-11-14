@@ -1,5 +1,7 @@
-//! Клиент Rust+ companion API: WebSocket ws://ip:port, бинарные кадры protobuf.
-//! playerToken нигде не логируется и не уходит во фронт.
+//! Клиент Rust+ companion API, бинарные кадры protobuf. Подключение через ретранслятор Facepunch
+//! (wss://companion-rust.facepunch.com/socket/<relay_id>, см. `relay_request`), если у сервера есть
+//! relay_id, иначе старый прямой ws://ip:port. Текстовые кадры ретранслятора пропускаются.
+//! playerToken и токен Rust+ нигде не логируются и не уходят во фронт.
 
 mod alerts;
 mod forms;
@@ -440,12 +442,65 @@ async fn run_session(
     }
 }
 
+const RELAY_HOST: &str = "companion-rust.facepunch.com";
+const RELAY_ORIGIN: &str = "https://app.playrust.com";
+const RELAY_SUBPROTOCOL: &str = "rustplus.auth.v1";
+
+/// base64url без паддинга (вторая подпротокольная строка — токен Rust+ в таком виде).
+fn b64url(s: &str) -> String {
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(s.as_bytes())
+}
+
+/// Запрос рукопожатия к ретранслятору Facepunch (с обновления Rust 2026-11-05 сервера не принимают
+/// прямой ws://ip:port). Формат взят из rustplusplus src/util/rustRelay.js:
+/// wss://companion-rust.facepunch.com/socket/<relay_id>?v=<ms>, подпротоколы
+/// ["rustplus.auth.v1", base64url(токен Rust+)], Origin https://app.playrust.com.
+fn relay_request(relay_id: &str, auth_token: &str) -> Result<tokio_tungstenite::tungstenite::handshake::client::Request, String> {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    use tokio_tungstenite::tungstenite::http::HeaderValue;
+    let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let url = format!("wss://{RELAY_HOST}/socket/{relay_id}?v={ms}");
+    let mut req = url.into_client_request().map_err(|e| format!("адрес ретранслятора: {e}"))?;
+    let proto = format!("{RELAY_SUBPROTOCOL}, {}", b64url(auth_token));
+    let h = req.headers_mut();
+    h.insert("Sec-WebSocket-Protocol", HeaderValue::from_str(&proto).map_err(|_| "токен Rust+ содержит недопустимые символы".to_string())?);
+    h.insert("Origin", HeaderValue::from_static(RELAY_ORIGIN));
+    Ok(req)
+}
+
+/// Понятная причина для отказа ретранслятора: 401/403 — почти всегда протухший токен Rust+.
+fn relay_reason(e: &str) -> String {
+    if e.contains("401") || e.contains("403") {
+        "ретранслятор Facepunch отклонил токен Rust+ (истёк?): нажми «Подключить через Steam» ещё раз".into()
+    } else {
+        format!("не удалось подключиться через ретранслятор: {e}")
+    }
+}
+
 async fn supervisor(app: AppHandle, creds: ServerCreds, player_id: u64, token: i32, mut rx: UnboundedReceiver<Cmd>, connected: Arc<AtomicBool>) {
-    let url = format!("ws://{}:{}", creds.ip, creds.port);
+    let relay = !creds.relay_id.trim().is_empty();
+    let direct_url = format!("ws://{}:{}", creds.ip, creds.port);
     let mut attempt: u32 = 0;
     loop {
         status(&app, "connecting", "");
-        let res = tokio::time::timeout(Duration::from_secs(10), tokio_tungstenite::connect_async(url.as_str())).await;
+        let res = if relay {
+            // токен перечитываем на каждой попытке: после повторного входа через Steam он новый
+            let Some(auth) = crate::pairing::auth_token(&app) else {
+                status(&app, "error", "нет токена Rust+: нажми «Подключить через Steam»");
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                continue;
+            };
+            let req = match relay_request(creds.relay_id.trim(), &auth) {
+                Ok(r) => r,
+                Err(e) => {
+                    status(&app, "error", &e);
+                    return;
+                }
+            };
+            tokio::time::timeout(Duration::from_secs(15), tokio_tungstenite::connect_async(req)).await
+        } else {
+            tokio::time::timeout(Duration::from_secs(10), tokio_tungstenite::connect_async(direct_url.as_str())).await
+        };
         let reason = match res {
             Ok(Ok((ws, _))) => {
                 attempt = 0;
@@ -459,6 +514,7 @@ async fn supervisor(app: AppHandle, creds: ServerCreds, player_id: u64, token: i
                 }
                 r
             }
+            Ok(Err(e)) if relay => relay_reason(&e.to_string()),
             Ok(Err(e)) => format!("не удалось подключиться: {e}"),
             Err(_) => "таймаут подключения".to_string(),
         };
@@ -473,7 +529,7 @@ pub async fn connect(app: AppHandle, creds: ServerCreds) -> Result<(), String> {
     disconnect(&app).await;
     let player_id: u64 = creds.player_id.trim().parse().map_err(|_| "некорректный SteamID".to_string())?;
     let token: i32 = creds.player_token.trim().parse().map_err(|_| "некорректный playerToken".to_string())?;
-    if creds.ip.trim().is_empty() || creds.port == 0 {
+    if creds.relay_id.trim().is_empty() && (creds.ip.trim().is_empty() || creds.port == 0) {
         return Err("не заданы ip/порт сервера".into());
     }
     let (tx, rx) = unbounded_channel();
@@ -529,4 +585,26 @@ pub async fn send_chat(app: AppHandle, text: String) -> Result<(), String> {
         return Ok(());
     }
     send_cmd(&app, Cmd::Chat(text))
+}
+
+#[cfg(test)]
+mod relay_tests {
+    use super::*;
+
+    #[test]
+    fn relay_handshake_shape() {
+        let req = relay_request("8c1f0e2a-relay", "eyJzdGVhbUlkIjoiMSJ9.sig+/=").unwrap();
+        let uri = req.uri().to_string();
+        assert!(uri.starts_with("wss://companion-rust.facepunch.com/socket/8c1f0e2a-relay?v="), "{uri}");
+        let proto = req.headers().get("Sec-WebSocket-Protocol").unwrap().to_str().unwrap();
+        assert_eq!(proto, format!("rustplus.auth.v1, {}", b64url("eyJzdGVhbUlkIjoiMSJ9.sig+/=")));
+        assert!(!proto.contains('+') && !proto.contains('/') && !proto.contains('='));
+        assert_eq!(req.headers().get("Origin").unwrap(), "https://app.playrust.com");
+    }
+
+    #[test]
+    fn relay_reason_hints_token() {
+        assert!(relay_reason("HTTP error: 401 Unauthorized").contains("Подключить через Steam"));
+        assert!(relay_reason("io error").starts_with("не удалось подключиться через ретранслятор"));
+    }
 }

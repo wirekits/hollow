@@ -2,10 +2,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ServerCreds {
+    #[serde(default)]
     pub ip: String,
+    #[serde(default)]
     pub port: u16,
     pub player_id: String,     // SteamID64 строкой
     pub player_token: String,  // i32 со знаком, строкой
+    /// id сервера в ретрансляторе Facepunch (поле `id` уведомления о сопряжении). С обновления Rust
+    /// 2026-11-05 сервера не принимают прямой ws://ip:port, подключение идёт через
+    /// wss://companion-rust.facepunch.com/socket/<relay_id>. Пусто — старый прямой режим.
+    #[serde(default)]
+    pub relay_id: String,
 }
 
 /// Куда и что слать. Секреты (webhook, tg_token) наружу только маской «•••».

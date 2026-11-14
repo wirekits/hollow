@@ -280,11 +280,14 @@ fn apply_server(old: Option<&ServerCreds>, v: &Value) -> Result<ServerCreds, Str
     if s.player_token.is_empty() {
         return Err("player_token не задан".into());
     }
-    if s.ip.is_empty() {
-        return Err("ip сервера не задан".into());
-    }
-    if s.port == 0 {
-        return Err("порт должен быть в диапазоне 1..65535".into());
+    // сервер через ретранслятор Facepunch (relay_id из сопряжения) живёт без ip/порта
+    if s.relay_id.is_empty() {
+        if s.ip.is_empty() {
+            return Err("ip сервера не задан".into());
+        }
+        if s.port == 0 {
+            return Err("порт должен быть в диапазоне 1..65535".into());
+        }
     }
     if s.player_id.is_empty() {
         return Err("player_id должен состоять только из цифр".into());

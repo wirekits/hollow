@@ -250,20 +250,28 @@ async fn handle_data(
     }
 }
 
+/// Токен Rust+ (вход через Steam) для подключения через ретранслятор Facepunch. Живёт ~14 дней.
+pub fn auth_token(app: &AppHandle) -> Option<String> {
+    let dir = data_dir(app).ok()?;
+    store::load(&dir).auth_token.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
+}
+
 async fn apply_server(app: &AppHandle, sp: notif::ServerPair) {
     let creds = crate::types::ServerCreds {
         ip: sp.ip.clone(),
         port: sp.port,
         player_id: sp.player_id.clone(),
         player_token: sp.player_token.clone(),
+        relay_id: sp.relay_id.clone(),
     };
     let profiles = app.state::<crate::profiles::ProfilesState>();
     if let Err(e) = profiles.set_active_server(creds.clone()) {
         emit_state(app, "error", &format!("Сервер получен, но не сохранён: {e}"));
         return;
     }
+    let label = if sp.name.is_empty() { "сервер".to_string() } else { format!("«{}»", sp.name) };
     let _ = app.emit("pair_server", json!({ "name": sp.name, "ip": sp.ip, "port": sp.port }));
-    emit_state(app, "paired", &format!("Сервер «{}» сопряжён", sp.name));
+    emit_state(app, "paired", &format!("Сервер {label} сопряжён"));
     if let Err(e) = crate::rustplus::connect(app.clone(), creds).await {
         emit_state(app, "error", &format!("Сервер сохранён, подключение не удалось: {}", fcm::scrub(&e)));
     }
@@ -272,7 +280,8 @@ async fn apply_server(app: &AppHandle, sp: notif::ServerPair) {
 fn apply_entity(app: &AppHandle, ep: notif::EntityPair) {
     let profiles = app.state::<crate::profiles::ProfilesState>();
     if let (Some(active), Some(ip), Some(port)) = (profiles.active_server(), ep.ip.as_ref(), ep.port) {
-        if active.ip != *ip || active.port != port {
+        // сервер через ретранслятор хранится без ip/port — сверять не с чем
+        if !active.ip.is_empty() && (active.ip != *ip || active.port != port) {
             emit_state(app, "waiting", "Устройство с другого сервера пропущено (не совпадает с активной пачкой)");
             return;
         }
